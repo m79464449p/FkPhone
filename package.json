@@ -1,0 +1,8 @@
+{
+  "name": "fkphone",
+  "private": true,
+  "scripts": {
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "cd backend && uvicorn app.main:app --reload"
+  }
+}
