@@ -50,7 +50,7 @@ class CoolapkPhoneSpider(scrapy.Spider):
     def parse(self, response):
         yield from self.parse_phone_list(response)
 
-        max_pages = self.settings.getint("COOLAPK_MAX_PAGES", 3)
+        max_pages = self.settings.getint("COOLAPK_MAX_PAGES", 1)
         if max_pages >= 2:
             yield self.build_page_request(2, max_pages)
 
@@ -110,7 +110,7 @@ class CoolapkPhoneSpider(scrapy.Spider):
                 source_url=source_url if base_url is None else source_url,
             )
 
-            if self.settings.getbool("COOLAPK_FETCH_VERSIONS", True):
+            if self.settings.getbool("COOLAPK_FETCH_VERSIONS", False):
                 yield scrapy.FormRequest(
                     url="https://m.coolapk.com/mp/productSelector/getProductVersion",
                     formdata={"callFunction": "indexSearch", "productId": product_id},
