@@ -11,6 +11,7 @@ jobs:
   prepare:
     name: Download and upload runner package
     runs-on: ubuntu-latest
+    environment: staging
     env:
       RUNNER_VERSION: 2.335.1
       RUNNER_SHA256: 4ef2f25285f0ae4477f1fe1e346db76d2f3ebf03824e2ddd1973a2819bf6c8cf
