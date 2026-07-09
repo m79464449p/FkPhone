@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     goofish_cookie_file: str = "../.goofish-cookies.json"
     goofish_headless: bool = False
     goofish_search_headless: bool = True
-    goofish_login_timeout_seconds: int = 180
+    goofish_login_timeout_seconds: int = 600
 
     model_config = SettingsConfigDict(env_file=("../.env", ".env"), extra="ignore")
 

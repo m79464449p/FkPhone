@@ -144,10 +144,13 @@ function App() {
   const [goofishListings, setGoofishListings] = useState<GoofishListing[]>([]);
   const [goofishLoading, setGoofishLoading] = useState(false);
   const [goofishSearching, setGoofishSearching] = useState(false);
+  const [goofishSearchStartedAt, setGoofishSearchStartedAt] = useState<number | null>(null);
+  const [goofishSearchElapsedSeconds, setGoofishSearchElapsedSeconds] = useState(0);
   const [goofishMessage, setGoofishMessage] = useState("");
   const [goofishError, setGoofishError] = useState("");
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("parameters");
   const compareRequestId = useRef(0);
+  const goofishSearchAbortRef = useRef<AbortController | null>(null);
 
   async function loadPhones() {
     setLoading(true);
@@ -170,6 +173,20 @@ function App() {
     void loadPhones();
     void loadGoofishListings();
   }, []);
+
+  useEffect(() => {
+    if (!goofishSearching || goofishSearchStartedAt === null) {
+      setGoofishSearchElapsedSeconds(0);
+      return;
+    }
+
+    const updateElapsed = () => {
+      setGoofishSearchElapsedSeconds(Math.floor((Date.now() - goofishSearchStartedAt) / 1000));
+    };
+    updateElapsed();
+    const timer = window.setInterval(updateElapsed, 1000);
+    return () => window.clearInterval(timer);
+  }, [goofishSearching, goofishSearchStartedAt]);
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
@@ -271,17 +288,22 @@ function App() {
     }
 
     setGoofishSearching(true);
+    setGoofishSearchStartedAt(Date.now());
     setGoofishMessage("");
     setGoofishError("");
+    const abortController = new AbortController();
+    goofishSearchAbortRef.current = abortController;
     try {
       const response = await fetch(`${API_BASE}/api/goofish/search`, {
         method: "POST",
+        signal: abortController.signal,
         headers: {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
           keywords,
-          max_results_per_keyword: 30
+          max_results_per_keyword: 30,
+          login_timeout_seconds: 600
         })
       });
       if (!response.ok) {
@@ -291,16 +313,37 @@ function App() {
       const result = (await response.json()) as GoofishSearchResponse;
       setGoofishMessage(
         result.login_required
-          ? "服务器未初始化闲鱼登录态：请先导入或同步登录 Cookie 后重试"
+          ? result.message || "闲鱼需要重新登录。请在弹出的扫码窗口完成登录后重试。"
           : `闲鱼命中 ${result.matched} 条，新增 ${result.inserted}，更新 ${result.updated}`
       );
       const nextKeyword = keywords[0] ?? "";
       setGoofishFilterKeyword(nextKeyword);
       await loadGoofishListings(nextKeyword);
     } catch (err) {
-      setGoofishError(err instanceof Error ? err.message : "搜索失败");
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setGoofishMessage("已取消闲鱼搜索");
+      } else {
+        setGoofishError(err instanceof Error ? err.message : "搜索失败");
+      }
     } finally {
+      if (goofishSearchAbortRef.current === abortController) {
+        goofishSearchAbortRef.current = null;
+      }
       setGoofishSearching(false);
+      setGoofishSearchStartedAt(null);
+    }
+  }
+
+  async function cancelGoofishSearch() {
+    goofishSearchAbortRef.current?.abort();
+    setGoofishSearching(false);
+    setGoofishSearchStartedAt(null);
+    setGoofishMessage("正在取消闲鱼搜索...");
+    try {
+      await fetch(`${API_BASE}/api/goofish/search`, { method: "DELETE" });
+      setGoofishMessage("已取消闲鱼搜索");
+    } catch (err) {
+      setGoofishError(err instanceof Error ? err.message : "取消失败");
     }
   }
 
@@ -473,11 +516,13 @@ function App() {
           listings={goofishListings}
           loading={goofishLoading}
           searching={goofishSearching}
+          searchElapsedSeconds={goofishSearchElapsedSeconds}
           message={goofishMessage}
           error={goofishError}
           onKeywordInputChange={setGoofishKeywordInput}
           onFilterKeywordChange={setGoofishFilterKeyword}
           onSearch={() => void searchGoofish()}
+          onCancelSearch={() => void cancelGoofishSearch()}
           onRefresh={() => void loadGoofishListings()}
         />
       )}
@@ -667,11 +712,13 @@ function GoofishPanel({
   listings,
   loading,
   searching,
+  searchElapsedSeconds,
   message,
   error,
   onKeywordInputChange,
   onFilterKeywordChange,
   onSearch,
+  onCancelSearch,
   onRefresh
 }: {
   keywordInput: string;
@@ -679,11 +726,13 @@ function GoofishPanel({
   listings: GoofishListing[];
   loading: boolean;
   searching: boolean;
+  searchElapsedSeconds: number;
   message: string;
   error: string;
   onKeywordInputChange: (value: string) => void;
   onFilterKeywordChange: (value: string) => void;
   onSearch: () => void;
+  onCancelSearch: () => void;
   onRefresh: () => void;
 }) {
   return (
@@ -732,7 +781,16 @@ function GoofishPanel({
       </div>
 
       {message && <div className="sync-message">{message}</div>}
-      {searching && <div className="sync-message">正在复用已登录会话搜索；只有登录失效时才会弹出扫码窗口。</div>}
+      {searching && (
+        <div className="sync-message goofish-wait-message">
+          <span>
+            正在检查闲鱼登录态，已等待 {formatDuration(searchElapsedSeconds)}；如果弹出 Chromium 窗口，请在 10 分钟内扫码登录。
+          </span>
+          <button className="inline-cancel-button" type="button" onClick={onCancelSearch}>
+            取消等待
+          </button>
+        </div>
+      )}
       {error && <div className="sync-message error-message">闲鱼接口失败：{error}</div>}
 
       <div className="goofish-table-wrap">
@@ -1108,6 +1166,13 @@ function formatGoofishEngagement(listing: GoofishListing) {
   if (listing.want_count != null) parts.push(`${listing.want_count}人想要`);
   if (listing.browse_count != null) parts.push(`${listing.browse_count}浏览`);
   return parts.length ? parts.join(" | ") : "-";
+}
+
+function formatDuration(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes === 0) return `${seconds} 秒`;
+  return `${minutes} 分 ${seconds.toString().padStart(2, "0")} 秒`;
 }
 
 function inferGoofishSpecs(listing: GoofishListing): GoofishSpec[] {

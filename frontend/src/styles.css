@@ -458,6 +458,30 @@ h1 {
   font-size: 14px;
 }
 
+.goofish-wait-message {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.inline-cancel-button {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 0 10px;
+  color: #9b2c2c;
+  background: #fff5f5;
+  border: 1px solid #f0c7c7;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.inline-cancel-button:hover {
+  background: #ffe8e8;
+}
+
 .text-button:disabled {
   color: #8c99a6;
   background: #edf1f4;

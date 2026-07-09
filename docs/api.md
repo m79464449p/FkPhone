@@ -151,7 +151,7 @@ POST /api/goofish/search
 {
   "keywords": ["turbo5max", "tubro5max"],
   "max_results_per_keyword": 30,
-  "login_timeout_seconds": 180
+  "login_timeout_seconds": 600
 }
 ```
 

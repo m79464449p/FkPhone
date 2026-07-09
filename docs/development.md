@@ -53,7 +53,7 @@ python -m playwright install chromium
 ```env
 GOOFISH_PROFILE_DIR=../.goofish-profile
 GOOFISH_HEADLESS=false
-GOOFISH_LOGIN_TIMEOUT_SECONDS=180
+GOOFISH_LOGIN_TIMEOUT_SECONDS=600
 ```
 
 触发搜索：

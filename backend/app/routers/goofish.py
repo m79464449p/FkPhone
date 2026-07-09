@@ -2,6 +2,7 @@ import json
 import re
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
@@ -11,6 +12,8 @@ from app.config import settings
 from app.database import get_connection
 
 router = APIRouter(prefix="/goofish", tags=["goofish"])
+goofish_process_lock = threading.Lock()
+goofish_process: subprocess.Popen[str] | None = None
 
 
 class GoofishListing(BaseModel):
@@ -88,6 +91,8 @@ def list_goofish_listings(
 
 @router.post("/search", response_model=GoofishSearchResponse)
 def search_goofish(payload: GoofishSearchRequest) -> GoofishSearchResponse:
+    global goofish_process
+
     keywords = normalize_keywords(payload.keywords)
     if not keywords:
         raise HTTPException(status_code=400, detail="keywords are required")
@@ -104,21 +109,32 @@ def search_goofish(payload: GoofishSearchRequest) -> GoofishSearchResponse:
     for keyword in keywords:
         command.extend(["--keyword", keyword])
 
-    try:
-        result = subprocess.run(
+    timeout = settings.crawler_timeout_seconds + (payload.login_timeout_seconds or settings.goofish_login_timeout_seconds)
+    with goofish_process_lock:
+        if goofish_process and goofish_process.poll() is None:
+            raise HTTPException(status_code=409, detail="goofish search is already running")
+        goofish_process = subprocess.Popen(
             command,
             cwd=Path(__file__).resolve().parents[2],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=settings.crawler_timeout_seconds + (payload.login_timeout_seconds or settings.goofish_login_timeout_seconds),
-            check=False,
         )
-    except subprocess.TimeoutExpired as exc:
-        raise HTTPException(status_code=504, detail="goofish search timed out") from exc
+        active_process = goofish_process
 
-    output = f"{result.stdout}\n{result.stderr}"
+    try:
+        stdout, stderr = active_process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        terminate_goofish_process()
+        raise HTTPException(status_code=504, detail="goofish search timed out") from exc
+    finally:
+        with goofish_process_lock:
+            if goofish_process is active_process and active_process.poll() is not None:
+                goofish_process = None
+
+    output = f"{stdout}\n{stderr}"
     response_payload = parse_json_tail(output)
-    if result.returncode != 0:
+    if active_process.returncode != 0:
         detail = response_payload or {"message": output[-2000:]}
         raise HTTPException(status_code=500, detail=detail)
 
@@ -126,6 +142,31 @@ def search_goofish(payload: GoofishSearchRequest) -> GoofishSearchResponse:
         raise HTTPException(status_code=500, detail=output[-2000:])
 
     return GoofishSearchResponse(**response_payload)
+
+
+@router.delete("/search")
+def cancel_goofish_search() -> dict[str, bool]:
+    return {"cancelled": terminate_goofish_process()}
+
+
+def terminate_goofish_process() -> bool:
+    global goofish_process
+
+    with goofish_process_lock:
+        process = goofish_process
+        if not process or process.poll() is not None:
+            goofish_process = None
+            return False
+
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+
+        goofish_process = None
+        return True
 
 
 def normalize_keywords(keywords: list[str]) -> list[str]:

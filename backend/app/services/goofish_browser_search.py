@@ -17,6 +17,9 @@ from playwright.sync_api import sync_playwright
 from app.config import settings
 from app.database import get_connection, init_database
 
+GOOFISH_SEARCH_URL = "https://www.goofish.com/search?q=turbo5max"
+GOOFISH_LOGIN_URL = "https://passport.goofish.com/mini_login.htm?appName=xianyu"
+
 
 @dataclass
 class Listing:
@@ -83,7 +86,7 @@ def run_search(profile_dir: Path, keywords: list[str], max_results: int, login_t
                 "updated": 0,
                 "matched": 0,
                 "login_required": True,
-                "message": "login is required, but visible login browser is disabled",
+                "message": "闲鱼需要重新登录，但当前禁用了可视化登录窗口。请将 GOOFISH_HEADLESS=false 后重试，或导入有效 Cookie。",
             }
 
         login_required = perform_visible_login(p, profile_dir, login_timeout)
@@ -93,7 +96,7 @@ def run_search(profile_dir: Path, keywords: list[str], max_results: int, login_t
                 "updated": 0,
                 "matched": 0,
                 "login_required": True,
-                "message": "login was not completed before timeout",
+                "message": f"已打开闲鱼扫码登录窗口，但 {login_timeout} 秒内没有检测到登录完成。请重新点击搜索并在弹出的二维码窗口扫码。",
             }
 
         stats = try_mtop_existing_session(p, profile_dir, keywords, max_results)
@@ -105,7 +108,7 @@ def run_search(profile_dir: Path, keywords: list[str], max_results: int, login_t
             "updated": 0,
             "matched": 0,
             "login_required": True,
-            "message": "login completed, but saved session could not be verified",
+            "message": "已检测到登录跳转，但保存的闲鱼登录态无法用于搜索。请重新扫码，或导入包含 _m_h5_tk 和 unb 的 Cookie。",
         }
 
 
@@ -114,7 +117,7 @@ def launch_context(playwright, profile_dir: Path, headless: bool):
         user_data_dir=str(profile_dir),
         headless=headless,
         viewport={"width": 1440, "height": 1000},
-        args=["--disable-dev-shm-usage"],
+        args=["--disable-dev-shm-usage", "--no-sandbox"],
     )
 
 
@@ -126,26 +129,35 @@ def get_live_page(context):
 
 
 def try_mtop_existing_session(playwright, profile_dir: Path, keywords: list[str], max_results: int) -> dict[str, int | bool | str | None] | None:
-    cookie_jar = read_cookie_file() or read_cookie_jar(playwright, profile_dir)
-    if not has_mtop_login_cookies(cookie_jar):
-        return None
+    for source, cookie_jar in read_cookie_candidates(playwright, profile_dir):
+        if not has_mtop_login_cookies(cookie_jar):
+            continue
 
-    all_listings: list[Listing] = []
-    try:
-        for keyword in keywords:
-            all_listings.extend(mtop_search_keyword(cookie_jar, keyword, max_results))
-    except (URLError, TimeoutError, ValueError) as exc:
-        print(f"Goofish mtop search failed: {exc}", file=sys.stderr, flush=True)
-        return None
+        all_listings: list[Listing] = []
+        try:
+            for keyword in keywords:
+                all_listings.extend(mtop_search_keyword(cookie_jar, keyword, max_results))
+        except (URLError, TimeoutError, ValueError) as exc:
+            print(f"Goofish mtop search failed with {source} cookies: {exc}", file=sys.stderr, flush=True)
+            continue
 
-    inserted, updated, matched = save_listings(all_listings)
-    return {
-        "inserted": inserted,
-        "updated": updated,
-        "matched": matched,
-        "login_required": False,
-        "message": None,
-    }
+        inserted, updated, matched = save_listings(all_listings)
+        return {
+            "inserted": inserted,
+            "updated": updated,
+            "matched": matched,
+            "login_required": False,
+            "message": None,
+        }
+
+    return None
+
+
+def read_cookie_candidates(playwright, profile_dir: Path) -> list[tuple[str, dict[str, str]]]:
+    return [
+        ("browser profile", read_cookie_jar(playwright, profile_dir)),
+        ("cookie file", read_cookie_file()),
+    ]
 
 
 def read_cookie_jar(playwright, profile_dir: Path) -> dict[str, str]:
@@ -378,6 +390,7 @@ def try_search_existing_session(playwright, profile_dir: Path, keywords: list[st
 
 def perform_visible_login(playwright, profile_dir: Path, login_timeout: int) -> bool:
     context = launch_context(playwright, profile_dir, headless=False)
+    clear_goofish_cookies(context)
     page = get_live_page(context)
     try:
         return ensure_logged_in(page, login_timeout)
@@ -385,14 +398,24 @@ def perform_visible_login(playwright, profile_dir: Path, login_timeout: int) -> 
         context.close()
 
 
+def clear_goofish_cookies(context) -> None:
+    try:
+        context.clear_cookies(domain=".goofish.com")
+        context.clear_cookies(domain="www.goofish.com")
+        context.clear_cookies(domain="h5api.m.goofish.com")
+    except PlaywrightError as exc:
+        print(f"Goofish stale cookie cleanup failed: {exc}", file=sys.stderr, flush=True)
+
+
 def ensure_logged_in(page, login_timeout: int) -> bool:
-    page.goto("https://www.goofish.com/search?q=turbo5max", wait_until="domcontentloaded")
+    page.goto(GOOFISH_SEARCH_URL, wait_until="domcontentloaded")
     page.wait_for_timeout(3000)
     if is_logged_in(page):
         return False
 
     print("Goofish login is required. Scan the QR code in the opened browser window.", file=sys.stderr, flush=True)
-    page.goto("https://www.goofish.com/login", wait_until="domcontentloaded")
+    page.goto(GOOFISH_LOGIN_URL, wait_until="domcontentloaded")
+    page.bring_to_front()
     deadline = time.monotonic() + login_timeout
     redirected_at: float | None = None
     probed_after_redirect = False
@@ -407,12 +430,12 @@ def ensure_logged_in(page, login_timeout: int) -> bool:
             redirected_at = redirected_at or time.monotonic()
         if redirected_at and not probed_after_redirect and time.monotonic() - redirected_at >= 8:
             probed_after_redirect = True
-            page.goto("https://www.goofish.com/search?q=turbo5max", wait_until="domcontentloaded")
+            page.goto(GOOFISH_SEARCH_URL, wait_until="domcontentloaded")
             page.wait_for_timeout(4000)
             if is_logged_in(page):
                 return False
 
-    page.goto("https://www.goofish.com/search?q=turbo5max", wait_until="domcontentloaded")
+    page.goto(GOOFISH_SEARCH_URL, wait_until="domcontentloaded")
     page.wait_for_timeout(3000)
     if is_logged_in(page):
         return False
@@ -420,9 +443,20 @@ def ensure_logged_in(page, login_timeout: int) -> bool:
 
 
 def is_logged_in(page) -> bool:
-    text = safe_inner_text(page)
-    hrefs = safe_href_text(page)
-    return bool(re.search(r"订单|网页版发闲置|Y\d{3,}|/personal", f"{text} {hrefs} {page.url}"))
+    if is_login_url(page.url):
+        return False
+
+    cookie_jar = read_page_cookie_jar(page)
+    return bool(cookie_jar.get("unb"))
+
+
+def read_page_cookie_jar(page) -> dict[str, str]:
+    try:
+        cookies = page.context.cookies(["https://www.goofish.com", "https://h5api.m.goofish.com"])
+    except PlaywrightError as exc:
+        print(f"Goofish login cookie check failed: {exc}", file=sys.stderr, flush=True)
+        return {}
+    return {cookie["name"]: cookie["value"] for cookie in cookies}
 
 
 def is_login_url(url: str) -> bool:
