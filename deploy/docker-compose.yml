@@ -22,9 +22,16 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/fkphone
       REDIS_URL: ""
+      GOOFISH_PROFILE_DIR: /app/.goofish-profile
+      GOOFISH_COOKIE_FILE: /app/.goofish-secrets/cookies.json
+      GOOFISH_HEADLESS: "true"
+      GOOFISH_SEARCH_HEADLESS: "true"
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - fkphone-goofish-profile:/app/.goofish-profile
+      - fkphone-goofish-secrets:/app/.goofish-secrets
     ports:
       - "8000:8000"
 
@@ -39,3 +46,5 @@ services:
 
 volumes:
   fkphone-postgres:
+  fkphone-goofish-profile:
+  fkphone-goofish-secrets:

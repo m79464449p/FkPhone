@@ -44,6 +44,35 @@ CREATE TABLE IF NOT EXISTS phone_versions (
 CREATE INDEX IF NOT EXISTS idx_phone_versions_phone_id
 ON phone_versions (phone_id);
 
+CREATE TABLE IF NOT EXISTS goofish_listings (
+    item_id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    price INTEGER,
+    location TEXT,
+    want_count INTEGER,
+    browse_count INTEGER,
+    seller_credit TEXT,
+    source_url TEXT NOT NULL,
+    raw_text TEXT NOT NULL,
+    first_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE goofish_listings ADD COLUMN IF NOT EXISTS browse_count INTEGER;
+
+CREATE TABLE IF NOT EXISTS goofish_listing_matches (
+    item_id TEXT NOT NULL REFERENCES goofish_listings(item_id) ON DELETE CASCADE,
+    keyword TEXT NOT NULL,
+    result_position INTEGER,
+    first_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (item_id, keyword)
+);
+
+CREATE INDEX IF NOT EXISTS idx_goofish_listing_matches_keyword
+ON goofish_listing_matches (keyword, last_seen_at DESC);
+
 INSERT INTO phones (id, name, brand, score)
 VALUES
     ('demo-iphone', 'iPhone Demo', 'Apple', 88),

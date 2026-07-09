@@ -1,14 +1,19 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import {
   ArrowDownUp,
+  Check,
+  Columns3,
   Database,
   ExternalLink,
   MonitorSmartphone,
+  Plus,
   RefreshCw,
   Search,
   Server,
+  ShoppingBag,
   SlidersHorizontal,
+  Trash2,
   X
 } from "lucide-react";
 import "./styles.css";
@@ -27,7 +32,7 @@ type Phone = {
   version_count: number;
 };
 
-type SortKey = "updated" | "score" | "price_asc" | "price_desc" | "name";
+type SortKey = "release_desc" | "score" | "price_asc" | "price_desc" | "name";
 
 type VersionSpec = {
   group: string;
@@ -43,6 +48,62 @@ type PhoneVersion = {
   price: number | null;
   specs: VersionSpec[];
   source_url: string | null;
+};
+
+type CompareSelection = {
+  config_id: string;
+  phone_name: string;
+  title: string;
+};
+
+type CompareColumn = {
+  config_id: string;
+  phone_id: string;
+  phone_name: string;
+  title: string;
+  price: number | null;
+  source_url: string | null;
+};
+
+type CompareRow = {
+  group: string;
+  subgroup: string;
+  name: string;
+  values: Record<string, string | null>;
+};
+
+type PhoneCompare = {
+  columns: CompareColumn[];
+  rows: CompareRow[];
+};
+
+type GoofishListing = {
+  item_id: string;
+  title: string;
+  price: number | null;
+  location: string | null;
+  want_count: number | null;
+  browse_count: number | null;
+  seller_credit: string | null;
+  source_url: string;
+  raw_text: string;
+  keywords: string[];
+  last_seen_at: string | null;
+};
+
+type GoofishSearchResponse = {
+  status: string;
+  keywords: string[];
+  inserted: number;
+  updated: number;
+  matched: number;
+  login_required: boolean;
+  message: string | null;
+};
+
+type GoofishSpec = {
+  label: string;
+  value: string;
 };
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
@@ -62,7 +123,7 @@ function App() {
   const [phones, setPhones] = useState<Phone[]>([]);
   const [query, setQuery] = useState("");
   const [brand, setBrand] = useState("all");
-  const [sortKey, setSortKey] = useState<SortKey>("updated");
+  const [sortKey, setSortKey] = useState<SortKey>("release_desc");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -72,6 +133,19 @@ function App() {
   const [versionError, setVersionError] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
+  const [compareSelection, setCompareSelection] = useState<CompareSelection[]>([]);
+  const [compareData, setCompareData] = useState<PhoneCompare | null>(null);
+  const [compareLoading, setCompareLoading] = useState(false);
+  const [compareError, setCompareError] = useState("");
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [goofishKeywordInput, setGoofishKeywordInput] = useState("turbo5max, tubro5max");
+  const [goofishFilterKeyword, setGoofishFilterKeyword] = useState("turbo5max");
+  const [goofishListings, setGoofishListings] = useState<GoofishListing[]>([]);
+  const [goofishLoading, setGoofishLoading] = useState(false);
+  const [goofishSearching, setGoofishSearching] = useState(false);
+  const [goofishMessage, setGoofishMessage] = useState("");
+  const [goofishError, setGoofishError] = useState("");
+  const compareRequestId = useRef(0);
 
   async function loadPhones() {
     setLoading(true);
@@ -92,11 +166,25 @@ function App() {
 
   useEffect(() => {
     void loadPhones();
+    void loadGoofishListings();
   }, []);
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
   }, [query, brand, sortKey]);
+
+  useEffect(() => {
+    if (!compareOpen) return;
+    if (compareSelection.length < 2) {
+      compareRequestId.current += 1;
+      setCompareData(null);
+      setCompareError("至少选择 2 个版本");
+      setCompareLoading(false);
+      return;
+    }
+
+    void loadCompareData(compareSelection);
+  }, [compareOpen, compareSelection]);
 
   async function openVersions(phone: Phone) {
     setSelectedPhone(phone);
@@ -154,6 +242,125 @@ function App() {
     }
   }
 
+  async function loadGoofishListings(keyword = goofishFilterKeyword) {
+    setGoofishLoading(true);
+    setGoofishError("");
+    try {
+      const params = new URLSearchParams({ limit: "20" });
+      if (keyword.trim()) params.set("keyword", keyword.trim());
+      const response = await fetch(`${API_BASE}/api/goofish/listings?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = (await response.json()) as GoofishListing[];
+      setGoofishListings(data);
+    } catch (err) {
+      setGoofishError(err instanceof Error ? err.message : "加载失败");
+    } finally {
+      setGoofishLoading(false);
+    }
+  }
+
+  async function searchGoofish() {
+    const keywords = parseKeywords(goofishKeywordInput);
+    if (keywords.length === 0) {
+      setGoofishError("请输入至少一个关键词");
+      return;
+    }
+
+    setGoofishSearching(true);
+    setGoofishMessage("");
+    setGoofishError("");
+    try {
+      const response = await fetch(`${API_BASE}/api/goofish/search`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          keywords,
+          max_results_per_keyword: 30
+        })
+      });
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(detail || `HTTP ${response.status}`);
+      }
+      const result = (await response.json()) as GoofishSearchResponse;
+      setGoofishMessage(
+        result.login_required
+          ? "服务器未初始化闲鱼登录态：请先导入或同步登录 Cookie 后重试"
+          : `闲鱼命中 ${result.matched} 条，新增 ${result.inserted}，更新 ${result.updated}`
+      );
+      const nextKeyword = keywords[0] ?? "";
+      setGoofishFilterKeyword(nextKeyword);
+      await loadGoofishListings(nextKeyword);
+    } catch (err) {
+      setGoofishError(err instanceof Error ? err.message : "搜索失败");
+    } finally {
+      setGoofishSearching(false);
+    }
+  }
+
+  function toggleCompareVersion(phone: Phone, version: PhoneVersion) {
+    setCompareData(null);
+    setCompareError("");
+    setCompareSelection((selection) => {
+      if (selection.some((item) => item.config_id === version.config_id)) {
+        return selection.filter((item) => item.config_id !== version.config_id);
+      }
+      if (selection.length >= 6) return selection;
+      return [
+        ...selection,
+        {
+          config_id: version.config_id,
+          phone_name: phone.name,
+          title: version.title
+        }
+      ];
+    });
+  }
+
+  async function loadCompareData(selection: CompareSelection[]) {
+    const requestId = ++compareRequestId.current;
+    setCompareError("");
+    if (selection.length < 2) {
+      setCompareError("至少选择 2 个版本");
+      return;
+    }
+
+    setCompareLoading(true);
+    try {
+      const params = new URLSearchParams();
+      for (const item of selection) {
+        params.append("config_ids", item.config_id);
+      }
+      const response = await fetch(`${API_BASE}/api/phones/compare?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = (await response.json()) as PhoneCompare;
+      if (requestId !== compareRequestId.current) return;
+      setCompareData(data);
+    } catch (err) {
+      if (requestId !== compareRequestId.current) return;
+      setCompareData(null);
+      setCompareError(err instanceof Error ? err.message : "加载失败");
+    } finally {
+      if (requestId !== compareRequestId.current) return;
+      setCompareLoading(false);
+    }
+  }
+
+  function openComparePanel() {
+    setCompareOpen(true);
+  }
+
+  function removeCompareVersion(configId: string) {
+    setCompareData(null);
+    setCompareSelection((selection) => selection.filter((item) => item.config_id !== configId));
+  }
+
   const brands = useMemo(() => {
     const counts = new Map<string, number>();
     for (const phone of phones) {
@@ -181,11 +388,12 @@ function App() {
     });
 
     return result.sort((a, b) => {
+      if (sortKey === "release_desc") return compareReleaseDateDesc(a, b);
       if (sortKey === "score") return b.score - a.score || compareName(a, b);
       if (sortKey === "price_asc") return comparePrice(a, b, "asc");
       if (sortKey === "price_desc") return comparePrice(a, b, "desc");
       if (sortKey === "name") return compareName(a, b);
-      return 0;
+      return compareReleaseDateDesc(a, b);
     });
   }, [phones, query, brand, sortKey]);
 
@@ -233,6 +441,20 @@ function App() {
         <Metric label="平均评分" value={formatScore(Math.round(averageScore))} />
       </section>
 
+      <GoofishPanel
+        keywordInput={goofishKeywordInput}
+        filterKeyword={goofishFilterKeyword}
+        listings={goofishListings}
+        loading={goofishLoading}
+        searching={goofishSearching}
+        message={goofishMessage}
+        error={goofishError}
+        onKeywordInputChange={setGoofishKeywordInput}
+        onFilterKeywordChange={setGoofishFilterKeyword}
+        onSearch={() => void searchGoofish()}
+        onRefresh={() => void loadGoofishListings()}
+      />
+
       <section className="toolbar" aria-label="筛选工具">
         <label className="search-field">
           <Search size={18} />
@@ -261,7 +483,7 @@ function App() {
             value={sortKey}
             onChange={(event) => setSortKey(event.target.value as SortKey)}
           >
-            <option value="updated">最近采集</option>
+            <option value="release_desc">发布时间降序</option>
             <option value="score">评分最高</option>
             <option value="price_asc">价格从低到高</option>
             <option value="price_desc">价格从高到低</option>
@@ -369,7 +591,30 @@ function App() {
           versions={versionCache[selectedPhone.id] ?? []}
           loading={versionLoading}
           error={versionError}
+          selectedConfigIds={compareSelection.map((item) => item.config_id)}
+          onToggleCompare={toggleCompareVersion}
           onClose={() => setSelectedPhone(null)}
+        />
+      )}
+
+      {compareSelection.length > 0 && (
+        <CompareDock
+          selection={compareSelection}
+          onOpen={() => void openComparePanel()}
+          onRemove={removeCompareVersion}
+          onClear={() => {
+            setCompareData(null);
+            setCompareSelection([]);
+          }}
+        />
+      )}
+
+      {compareOpen && (
+        <ComparePanel
+          data={compareData}
+          loading={compareLoading}
+          error={compareError}
+          onClose={() => setCompareOpen(false)}
         />
       )}
     </main>
@@ -385,17 +630,156 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
+function GoofishPanel({
+  keywordInput,
+  filterKeyword,
+  listings,
+  loading,
+  searching,
+  message,
+  error,
+  onKeywordInputChange,
+  onFilterKeywordChange,
+  onSearch,
+  onRefresh
+}: {
+  keywordInput: string;
+  filterKeyword: string;
+  listings: GoofishListing[];
+  loading: boolean;
+  searching: boolean;
+  message: string;
+  error: string;
+  onKeywordInputChange: (value: string) => void;
+  onFilterKeywordChange: (value: string) => void;
+  onSearch: () => void;
+  onRefresh: () => void;
+}) {
+  return (
+    <section className="goofish-panel" aria-label="闲鱼搜索">
+      <header className="goofish-header">
+        <div>
+          <span className="detail-kicker">Goofish</span>
+          <h2>闲鱼监控</h2>
+        </div>
+        <span className="goofish-count">
+          <ShoppingBag size={16} />
+          {listings.length.toLocaleString("zh-CN")} 条
+        </span>
+      </header>
+
+      <div className="goofish-controls">
+        <label className="search-field">
+          <Search size={18} />
+          <input
+            value={keywordInput}
+            onChange={(event) => onKeywordInputChange(event.target.value)}
+            placeholder="关键词，用逗号分隔"
+          />
+        </label>
+        <button className="icon-button" type="button" onClick={onSearch} disabled={searching}>
+          <RefreshCw size={18} />
+          {searching ? "等待登录/搜索" : "搜索闲鱼"}
+        </button>
+        <label className="search-field compact-field">
+          <Search size={18} />
+          <input
+            value={filterKeyword}
+            onChange={(event) => onFilterKeywordChange(event.target.value)}
+            placeholder="列表关键词"
+          />
+        </label>
+        <button
+          className="icon-button secondary-button"
+          type="button"
+          onClick={onRefresh}
+          disabled={loading}
+        >
+          <RefreshCw size={18} />
+          {loading ? "刷新中" : "刷新列表"}
+        </button>
+      </div>
+
+      {message && <div className="sync-message">{message}</div>}
+      {searching && <div className="sync-message">正在复用已登录会话搜索；只有登录失效时才会弹出扫码窗口。</div>}
+      {error && <div className="sync-message error-message">闲鱼接口失败：{error}</div>}
+
+      <div className="goofish-table-wrap">
+        <table className="goofish-table">
+          <thead>
+            <tr>
+              <th>商品</th>
+              <th>价格</th>
+              <th>地区</th>
+              <th>热度</th>
+              <th>关键词</th>
+              <th>链接</th>
+            </tr>
+          </thead>
+          <tbody>
+            {listings.map((listing) => {
+              const specs = inferGoofishSpecs(listing);
+              return (
+                <tr key={listing.item_id}>
+                  <td>
+                    <a
+                      className="goofish-title-link"
+                      href={listing.source_url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {listing.title}
+                    </a>
+                    <div className="goofish-spec-grid" aria-label="闲鱼商品关键信息">
+                      {specs.map((spec) => (
+                        <span className="goofish-spec" key={`${listing.item_id}-${spec.label}`}>
+                          <em>{spec.label}：</em>
+                          <b>{spec.value}</b>
+                        </span>
+                      ))}
+                    </div>
+                    <span>{listing.seller_credit || "信用暂无"}</span>
+                  </td>
+                  <td>
+                    <span className="goofish-price">{formatPrice(listing.price)}</span>
+                  </td>
+                  <td>{listing.location || "-"}</td>
+                  <td>
+                    <span className="goofish-engagement">{formatGoofishEngagement(listing)}</span>
+                  </td>
+                <td>{listing.keywords.join(", ") || "-"}</td>
+                <td>
+                  <a className="goofish-open-button" href={listing.source_url} target="_blank" rel="noreferrer">
+                    打开闲鱼
+                    <ExternalLink size={14} />
+                  </a>
+                </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {!loading && listings.length === 0 && <div className="empty-table">暂无闲鱼商品</div>}
+      </div>
+    </section>
+  );
+}
+
 function VersionPanel({
   phone,
   versions,
   loading,
   error,
+  selectedConfigIds,
+  onToggleCompare,
   onClose
 }: {
   phone: Phone;
   versions: PhoneVersion[];
   loading: boolean;
   error: string;
+  selectedConfigIds: string[];
+  onToggleCompare: (phone: Phone, version: PhoneVersion) => void;
   onClose: () => void;
 }) {
   return (
@@ -419,14 +803,29 @@ function VersionPanel({
         )}
 
         {!loading && !error && versions.length > 0 && (
-          <VersionSummary versions={versions} />
+          <VersionSummary
+            phone={phone}
+            versions={versions}
+            selectedConfigIds={selectedConfigIds}
+            onToggleCompare={onToggleCompare}
+          />
         )}
       </aside>
     </div>
   );
 }
 
-function VersionSummary({ versions }: { versions: PhoneVersion[] }) {
+function VersionSummary({
+  phone,
+  versions,
+  selectedConfigIds,
+  onToggleCompare
+}: {
+  phone: Phone;
+  versions: PhoneVersion[];
+  selectedConfigIds: string[];
+  onToggleCompare: (phone: Phone, version: PhoneVersion) => void;
+}) {
   const representative = versions[0];
   const featuredSpecs = pickFeaturedSpecs(representative.specs);
 
@@ -438,12 +837,21 @@ function VersionSummary({ versions }: { versions: PhoneVersion[] }) {
           <span>{versions.length} 个版本</span>
         </div>
         <div className="sku-tags">
-          {versions.map((version) => (
-            <span className="sku-tag" key={version.config_id}>
-              <strong>{version.title}</strong>
-              <em>{formatPrice(version.price)}</em>
-            </span>
-          ))}
+          {versions.map((version) => {
+            const selected = selectedConfigIds.includes(version.config_id);
+            return (
+              <button
+                className={`sku-tag ${selected ? "selected" : ""}`}
+                key={version.config_id}
+                type="button"
+                onClick={() => onToggleCompare(phone, version)}
+              >
+                {selected ? <Check size={14} /> : <Plus size={14} />}
+                <strong>{version.title}</strong>
+                <em>{formatPrice(version.price)}</em>
+              </button>
+            );
+          })}
         </div>
       </section>
 
@@ -476,6 +884,117 @@ function VersionSummary({ versions }: { versions: PhoneVersion[] }) {
           </a>
         )}
       </section>
+    </div>
+  );
+}
+
+function CompareDock({
+  selection,
+  onOpen,
+  onRemove,
+  onClear
+}: {
+  selection: CompareSelection[];
+  onOpen: () => void;
+  onRemove: (configId: string) => void;
+  onClear: () => void;
+}) {
+  return (
+    <section className="compare-dock" aria-label="对比栏">
+      <div className="compare-dock-items">
+        {selection.map((item) => (
+          <span className="compare-chip" key={item.config_id}>
+            <strong>{item.phone_name}</strong>
+            <em>{item.title}</em>
+            <button type="button" onClick={() => onRemove(item.config_id)} aria-label="移除">
+              <X size={14} />
+            </button>
+          </span>
+        ))}
+      </div>
+      <div className="compare-dock-actions">
+        <button className="text-button" type="button" onClick={onClear}>
+          <Trash2 size={14} />
+          清空
+        </button>
+        <button
+          className="icon-button"
+          type="button"
+          onClick={onOpen}
+          disabled={selection.length < 2}
+        >
+          <Columns3 size={16} />
+          对比 {selection.length}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function ComparePanel({
+  data,
+  loading,
+  error,
+  onClose
+}: {
+  data: PhoneCompare | null;
+  loading: boolean;
+  error: string;
+  onClose: () => void;
+}) {
+  return (
+    <div className="detail-overlay" role="dialog" aria-modal="true" aria-label="参数对比">
+      <aside className="compare-panel">
+        <header className="detail-header">
+          <div>
+            <span className="detail-kicker">Compare</span>
+            <h2>参数对比</h2>
+          </div>
+          <button className="close-button" type="button" onClick={onClose} aria-label="关闭">
+            <X size={20} />
+          </button>
+        </header>
+
+        {loading && <div className="state-box">正在生成对比</div>}
+        {error && <div className="state-box error-box">对比加载失败：{error}</div>}
+        {!loading && !error && data && <CompareTable data={data} />}
+      </aside>
+    </div>
+  );
+}
+
+function CompareTable({ data }: { data: PhoneCompare }) {
+  return (
+    <div className="compare-table-wrap">
+      <table className="compare-table">
+        <thead>
+          <tr>
+            <th>参数</th>
+            {data.columns.map((column) => (
+              <th key={column.config_id}>
+                <strong>{column.phone_name}</strong>
+                <span>{column.title}</span>
+                <em>{formatPrice(column.price)}</em>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {data.rows.map((row) => (
+            <tr key={`${row.group}-${row.subgroup}-${row.name}`}>
+              <th>
+                <strong>{row.name}</strong>
+                <span>{[row.group, row.subgroup].filter(Boolean).join(" / ")}</span>
+              </th>
+              {data.columns.map((column) => (
+                <td key={`${row.name}-${column.config_id}`}>
+                  {row.values[column.config_id] || "-"}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -513,15 +1032,139 @@ function comparePrice(a: Phone, b: Phone, direction: "asc" | "desc") {
   return direction === "asc" ? left - right : right - left;
 }
 
+function compareReleaseDateDesc(a: Phone, b: Phone) {
+  return getReleaseTimestamp(b) - getReleaseTimestamp(a) || compareName(a, b);
+}
+
+function getReleaseTimestamp(phone: Phone) {
+  const specs = phone.specs ?? "";
+  const zhDate = specs.match(/(\d{4})年\s*(\d{1,2})月(?:\s*(\d{1,2})日)?/);
+  const slashDate = specs.match(/(\d{4})[-/.](\d{1,2})(?:[-/.](\d{1,2}))?/);
+  const match = zhDate ?? slashDate;
+  if (!match) return 0;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3] ?? 1);
+  return Date.UTC(year, month - 1, day);
+}
+
 function sortLabel(sortKey: SortKey) {
   const labels: Record<SortKey, string> = {
-    updated: "最近采集",
+    release_desc: "发布时间降序",
     score: "评分最高",
     price_asc: "价格从低到高",
     price_desc: "价格从高到低",
     name: "名称"
   };
   return labels[sortKey];
+}
+
+function parseKeywords(value: string) {
+  const seen = new Set<string>();
+  return value
+    .split(/[,，\n]/)
+    .map((keyword) => keyword.trim())
+    .filter((keyword) => {
+      if (!keyword || seen.has(keyword)) return false;
+      seen.add(keyword);
+      return true;
+    });
+}
+
+function formatGoofishEngagement(listing: GoofishListing) {
+  const parts = [];
+  if (listing.want_count != null) parts.push(`${listing.want_count}人想要`);
+  if (listing.browse_count != null) parts.push(`${listing.browse_count}浏览`);
+  return parts.length ? parts.join(" | ") : "-";
+}
+
+function inferGoofishSpecs(listing: GoofishListing): GoofishSpec[] {
+  const text = `${listing.title} ${listing.raw_text}`.replace(/\s+/g, " ");
+  const memoryPair = text.match(/(\d{1,2})\s*(?:GB|G)?\s*[+＋]\s*(\d{2,4})\s*(?:GB|G|TB)?/i);
+  const ram = memoryPair ? `${memoryPair[1]}GB` : findFirst(text, [/运行内存[:：]?\s*(\d{1,2})\s*(?:GB|G)/i, /\b(12|16|24|8)\s*(?:GB|G)\s*(?:运存|运行)/i]);
+  const storage = memoryPair
+    ? normalizeStorage(memoryPair[2])
+    : findStorage(text);
+  const specs: GoofishSpec[] = [
+    { label: "品牌", value: inferGoofishBrand(text) },
+    { label: "型号", value: inferGoofishModel(text) },
+    { label: "存储容量", value: storage || "未知" },
+    { label: "运行内存", value: ram || "未知" },
+    { label: "版本", value: inferGoofishVersion(text) },
+    { label: "拆修和功能", value: inferGoofishRepair(text) }
+  ];
+  return specs;
+}
+
+function inferGoofishBrand(text: string) {
+  if (/MIUI|小米|REDMI|红米/i.test(text)) return "MIUI/小米";
+  if (/iPhone|Apple|苹果/i.test(text)) return "Apple/苹果";
+  if (/荣耀/i.test(text)) return "荣耀";
+  if (/华为/i.test(text)) return "华为";
+  if (/OPPO/i.test(text)) return "OPPO";
+  if (/vivo|iQOO/i.test(text)) return /iQOO/i.test(text) ? "iQOO" : "vivo";
+  return "未知";
+}
+
+function inferGoofishModel(text: string) {
+  const normalized = text.replace(/\s+/g, " ");
+  if (/(?:REDMI|红米)?\s*(?:Turbo|Tubro)\s*5\s*Max|(?:红米)?\s*t(?:urbo|ubro)?5max|红米\s*t5max/i.test(normalized)) {
+    return "REDMI Turbo 5 Max";
+  }
+  if (/(?:REDMI|红米)?\s*(?:Turbo|Tubro)\s*5(?!\s*Max)|(?:红米)?\s*t(?:urbo|ubro)?5(?!max)/i.test(normalized)) {
+    return "REDMI Turbo 5";
+  }
+  const redmi = normalized.match(/(?:REDMI|红米)\s*[A-Za-z0-9]+(?:\s*(?:Pro|Max|Ultra|至尊版))?/i);
+  if (redmi) return cleanSpecValue(redmi[0]);
+  return "未知";
+}
+
+function inferGoofishVersion(text: string) {
+  if (/大陆国行|国行|国行版|中国大陆版/.test(text)) return "大陆国行";
+  if (/港版/.test(text)) return "港版";
+  if (/美版/.test(text)) return "美版";
+  if (/日版/.test(text)) return "日版";
+  return "未知";
+}
+
+function inferGoofishRepair(text: string) {
+  if (/无任何维修|无维修|无拆无修|全原无拆修|无拆修/.test(text)) return "无任何维修";
+  if (/功能全好|功能正常|功能全正常/.test(text)) return "功能正常";
+  if (/拆修|维修|进水|暗病/.test(text)) return "需核实";
+  return "未知";
+}
+
+function findStorage(text: string) {
+  const explicit = text.match(/(?:存储容量|内存|容量)[:：]?\s*(\d{2,4})\s*(GB|G|TB)/i);
+  if (explicit) return normalizeStorage(`${explicit[1]}${explicit[2]}`);
+  const values = [...text.matchAll(/\b(\d{2,4})\s*(GB|G|TB)\b/gi)]
+    .map((match) => normalizeStorage(`${match[1]}${match[2]}`))
+    .filter((value) => {
+      const numeric = Number(value.replace(/\D/g, ""));
+      return value.includes("TB") || numeric >= 32;
+    });
+  return values[0] || "";
+}
+
+function normalizeStorage(value: string) {
+  const match = String(value).match(/(\d{1,4})\s*(GB|G|TB)?/i);
+  if (!match) return "";
+  const rawUnit = (match[2] || "GB").toUpperCase();
+  const unit = rawUnit === "G" ? "GB" : rawUnit;
+  return `${match[1]}${unit}`;
+}
+
+function findFirst(text: string, patterns: RegExp[]) {
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) return `${match[1]}GB`;
+  }
+  return "";
+}
+
+function cleanSpecValue(value: string) {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(

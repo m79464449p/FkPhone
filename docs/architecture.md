@@ -19,6 +19,7 @@
 - 酷安机型搜索：`https://m.coolapk.com/mp/productSelector/configSearch?&callFunction=indexSearch`
 - 酷安版本接口：`https://m.coolapk.com/mp/productSelector/getProductVersion`
 - 酷安版本参数页：`https://m.coolapk.com/mp/product/configInfo?id={configId}&drawNav=1`
+- 闲鱼搜索页：通过持久化 Chromium 登录态访问 `https://www.goofish.com/search?q={keyword}`，本地先人工扫码登录，服务器阶段复用同一 profile 挂载和远程可视化登录入口。
 
 ## 服务端口
 

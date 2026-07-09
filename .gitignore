@@ -36,6 +36,8 @@ venv/
 data/
 tmp/
 downloads/
+.goofish-profile/
+.goofish-cookies.json
 
 # Docker / deploy
 *.pid
