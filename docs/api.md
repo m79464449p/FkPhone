@@ -56,6 +56,8 @@ GET /api/phones
 GET /api/phones/{phone_id}/versions
 ```
 
+`specs` 保存自酷安参数页的完整分组参数，包含页面里的所有 `config-item`。
+
 响应：
 
 ```json
@@ -77,3 +79,20 @@ GET /api/phones/{phone_id}/versions
   }
 ]
 ```
+
+### 同步酷安数据
+
+```http
+POST /api/crawl/coolapk
+```
+
+请求：
+
+```json
+{
+  "max_pages": 1,
+  "fetch_versions": true
+}
+```
+
+`fetch_versions` 默认值为 `true`，开启后会进入每个机型版本的参数页并保存全部参数到后端。

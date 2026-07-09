@@ -12,7 +12,7 @@ router = APIRouter(prefix="/crawl", tags=["crawl"])
 
 class CrawlRequest(BaseModel):
     max_pages: int = Field(default=1, ge=1, le=5)
-    fetch_versions: bool = False
+    fetch_versions: bool = True
 
 
 class CrawlResponse(BaseModel):

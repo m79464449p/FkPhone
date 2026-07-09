@@ -129,7 +129,7 @@ function App() {
         },
         body: JSON.stringify({
           max_pages: 1,
-          fetch_versions: false
+          fetch_versions: true
         })
       });
       if (!response.ok) {
@@ -139,9 +139,12 @@ function App() {
         inserted: number;
         updated: number;
         skipped_unchanged: number;
+        version_inserted: number;
+        version_updated: number;
+        version_skipped_unchanged: number;
       };
       setSyncMessage(
-        `新增 ${result.inserted}，更新 ${result.updated}，未变化 ${result.skipped_unchanged}`
+        `手机新增 ${result.inserted}，更新 ${result.updated}，未变化 ${result.skipped_unchanged}；参数新增 ${result.version_inserted}，更新 ${result.version_updated}，未变化 ${result.version_skipped_unchanged}`
       );
       await loadPhones();
     } catch (err) {
@@ -211,6 +214,15 @@ function App() {
           <span>
             <Database size={16} /> database
           </span>
+          <button
+            className="top-sync-button"
+            onClick={() => void syncCoolapkOnce()}
+            type="button"
+            disabled={syncing}
+          >
+            <RefreshCw size={16} />
+            {syncing ? "同步中" : "手动同步"}
+          </button>
         </div>
       </section>
 
