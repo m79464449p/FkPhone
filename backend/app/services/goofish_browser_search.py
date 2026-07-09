@@ -498,7 +498,19 @@ def save_listings(listings: list[Listing]) -> tuple[int, int, int]:
                 "source_url": listing.source_url,
                 "raw_text": listing.raw_text,
             }
-            changed = not existing or dict(existing) != incoming
+            effective_incoming = incoming
+            if existing:
+                effective_incoming = {
+                    **incoming,
+                    "browse_count": incoming["browse_count"] if incoming["browse_count"] is not None else existing["browse_count"],
+                    "seller_credit": incoming["seller_credit"] or existing["seller_credit"],
+                    "raw_text": (
+                        existing["raw_text"]
+                        if incoming["browse_count"] is None and existing["browse_count"] is not None
+                        else incoming["raw_text"]
+                    ),
+                }
+            changed = not existing or dict(existing) != effective_incoming
             conn.execute(
                 """
                 INSERT INTO goofish_listings (
@@ -514,20 +526,28 @@ def save_listings(listings: list[Listing]) -> tuple[int, int, int]:
                     price = EXCLUDED.price,
                     location = EXCLUDED.location,
                     want_count = EXCLUDED.want_count,
-                    browse_count = EXCLUDED.browse_count,
-                    seller_credit = EXCLUDED.seller_credit,
+                    browse_count = COALESCE(EXCLUDED.browse_count, goofish_listings.browse_count),
+                    seller_credit = COALESCE(EXCLUDED.seller_credit, goofish_listings.seller_credit),
                     source_url = EXCLUDED.source_url,
-                    raw_text = EXCLUDED.raw_text,
+                    raw_text = CASE
+                        WHEN EXCLUDED.browse_count IS NULL AND goofish_listings.browse_count IS NOT NULL
+                        THEN goofish_listings.raw_text
+                        ELSE EXCLUDED.raw_text
+                    END,
                     last_seen_at = CURRENT_TIMESTAMP,
                     updated_at = CASE
                         WHEN goofish_listings.title IS DISTINCT FROM EXCLUDED.title
                             OR goofish_listings.price IS DISTINCT FROM EXCLUDED.price
                             OR goofish_listings.location IS DISTINCT FROM EXCLUDED.location
                             OR goofish_listings.want_count IS DISTINCT FROM EXCLUDED.want_count
-                            OR goofish_listings.browse_count IS DISTINCT FROM EXCLUDED.browse_count
-                            OR goofish_listings.seller_credit IS DISTINCT FROM EXCLUDED.seller_credit
+                            OR goofish_listings.browse_count IS DISTINCT FROM COALESCE(EXCLUDED.browse_count, goofish_listings.browse_count)
+                            OR goofish_listings.seller_credit IS DISTINCT FROM COALESCE(EXCLUDED.seller_credit, goofish_listings.seller_credit)
                             OR goofish_listings.source_url IS DISTINCT FROM EXCLUDED.source_url
-                            OR goofish_listings.raw_text IS DISTINCT FROM EXCLUDED.raw_text
+                            OR goofish_listings.raw_text IS DISTINCT FROM CASE
+                                WHEN EXCLUDED.browse_count IS NULL AND goofish_listings.browse_count IS NOT NULL
+                                THEN goofish_listings.raw_text
+                                ELSE EXCLUDED.raw_text
+                            END
                         THEN CURRENT_TIMESTAMP
                         ELSE goofish_listings.updated_at
                     END
