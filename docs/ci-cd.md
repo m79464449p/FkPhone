@@ -1,7 +1,7 @@
 # CI/CD
 
-This project uses GitHub Actions for CI and an SSH-based manual deployment to
-the staging server.
+This project uses GitHub Actions for CI and an SSH-based deployment to the
+staging server.
 
 ## Workflows
 
@@ -9,11 +9,9 @@ the staging server.
   - Builds the frontend.
   - Runs backend unit tests.
   - Validates and builds Docker Compose services.
-- `Deploy staging`: manual only.
-  - Open GitHub Actions.
-  - Select `Deploy staging`.
-  - Click `Run workflow`.
-  - Choose a branch, tag, or commit, then deploy.
+- `Deploy staging`: runs automatically after `CI` succeeds on `main`.
+  - Manual `Run workflow` remains available as a fallback.
+  - Choose a branch, tag, or commit when running it manually.
 
 ## GitHub secrets
 
@@ -55,8 +53,10 @@ The deployment user is `fkphone-deploy`, and the application is synced to
 
 ## Recommended usage while testing
 
-- Push to `dev` or `main` to verify builds.
-- Deploy only with the manual `Deploy staging` workflow.
+- Push to `dev` to verify builds without deployment.
+- Push to `main` to run CI, then deploy automatically after CI succeeds.
+- Use the manual `Deploy staging` workflow when you need to redeploy a specific
+  branch, tag, or commit.
 - Keep `main` protected once the flow is stable.
 - Add a required reviewer to the `staging` environment if you want a second
   confirmation before deployment.
