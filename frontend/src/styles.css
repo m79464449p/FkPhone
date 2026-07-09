@@ -116,6 +116,52 @@ h1 {
   line-height: 1;
 }
 
+.workspace-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  margin: 0 0 14px;
+  background: #e8eef2;
+  border: 1px solid #d4dee6;
+  border-radius: 8px;
+}
+
+.workspace-tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 128px;
+  min-height: 40px;
+  padding: 0 12px;
+  color: #4b5967;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.workspace-tabs button.active {
+  color: #0f4f51;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 10%);
+}
+
+.workspace-tabs span {
+  min-width: 26px;
+  padding: 2px 7px;
+  color: #637282;
+  background: #eef3f6;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.workspace-tabs button.active span {
+  color: #116466;
+  background: #e2f3ef;
+}
+
 .goofish-panel {
   padding: 16px;
   margin-bottom: 14px;
@@ -915,6 +961,16 @@ h1 {
 
   h1 {
     font-size: 28px;
+  }
+
+  .workspace-tabs {
+    display: flex;
+    width: 100%;
+  }
+
+  .workspace-tabs button {
+    flex: 1;
+    min-width: 0;
   }
 
   .summary-grid,

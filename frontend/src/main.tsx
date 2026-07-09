@@ -33,6 +33,7 @@ type Phone = {
 };
 
 type SortKey = "release_desc" | "score" | "price_asc" | "price_desc" | "name";
+type WorkspaceTab = "parameters" | "goofish";
 
 type VersionSpec = {
   group: string;
@@ -145,6 +146,7 @@ function App() {
   const [goofishSearching, setGoofishSearching] = useState(false);
   const [goofishMessage, setGoofishMessage] = useState("");
   const [goofishError, setGoofishError] = useState("");
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>("parameters");
   const compareRequestId = useRef(0);
 
   async function loadPhones() {
@@ -441,146 +443,175 @@ function App() {
         <Metric label="平均评分" value={formatScore(Math.round(averageScore))} />
       </section>
 
-      <GoofishPanel
-        keywordInput={goofishKeywordInput}
-        filterKeyword={goofishFilterKeyword}
-        listings={goofishListings}
-        loading={goofishLoading}
-        searching={goofishSearching}
-        message={goofishMessage}
-        error={goofishError}
-        onKeywordInputChange={setGoofishKeywordInput}
-        onFilterKeywordChange={setGoofishFilterKeyword}
-        onSearch={() => void searchGoofish()}
-        onRefresh={() => void loadGoofishListings()}
-      />
-
-      <section className="toolbar" aria-label="筛选工具">
-        <label className="search-field">
-          <Search size={18} />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="搜索型号、品牌、芯片、电池"
-          />
-        </label>
-
-        <label className="select-field">
-          <span>品牌</span>
-          <select value={brand} onChange={(event) => setBrand(event.target.value)}>
-            <option value="all">全部品牌</option>
-            {brands.map(([name, count]) => (
-              <option key={name} value={name}>
-                {name} ({count})
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="select-field">
-          <span>排序</span>
-          <select
-            value={sortKey}
-            onChange={(event) => setSortKey(event.target.value as SortKey)}
-          >
-            <option value="release_desc">发布时间降序</option>
-            <option value="score">评分最高</option>
-            <option value="price_asc">价格从低到高</option>
-            <option value="price_desc">价格从高到低</option>
-            <option value="name">名称</option>
-          </select>
-        </label>
-
-        <button className="icon-button" onClick={() => void loadPhones()} type="button">
-          <RefreshCw size={18} />
-          刷新
+      <nav className="workspace-tabs" aria-label="功能切换">
+        <button
+          className={activeTab === "parameters" ? "active" : ""}
+          type="button"
+          onClick={() => setActiveTab("parameters")}
+          aria-current={activeTab === "parameters" ? "page" : undefined}
+        >
+          <SlidersHorizontal size={17} />
+          参数
+          <span>{phones.length.toLocaleString("zh-CN")}</span>
         </button>
         <button
-          className="icon-button secondary-button"
-          onClick={() => void syncCoolapkOnce()}
+          className={activeTab === "goofish" ? "active" : ""}
           type="button"
-          disabled={syncing}
+          onClick={() => setActiveTab("goofish")}
+          aria-current={activeTab === "goofish" ? "page" : undefined}
         >
-          <RefreshCw size={18} />
-          {syncing ? "同步中" : "同步酷安"}
+          <ShoppingBag size={17} />
+          闲鱼
+          <span>{goofishListings.length.toLocaleString("zh-CN")}</span>
         </button>
-      </section>
+      </nav>
 
-      {syncMessage && <div className="sync-message">{syncMessage}</div>}
+      {activeTab === "goofish" && (
+        <GoofishPanel
+          keywordInput={goofishKeywordInput}
+          filterKeyword={goofishFilterKeyword}
+          listings={goofishListings}
+          loading={goofishLoading}
+          searching={goofishSearching}
+          message={goofishMessage}
+          error={goofishError}
+          onKeywordInputChange={setGoofishKeywordInput}
+          onFilterKeywordChange={setGoofishFilterKeyword}
+          onSearch={() => void searchGoofish()}
+          onRefresh={() => void loadGoofishListings()}
+        />
+      )}
 
-      <section className="result-header" aria-label="列表状态">
-        <div>
-          <strong>{filteredPhones.length.toLocaleString("zh-CN")}</strong>
-          <span> 条结果</span>
-        </div>
-        <span className="muted">
-          <ArrowDownUp size={15} /> {sortLabel(sortKey)}
-        </span>
-      </section>
-
-      {loading && <div className="state-box">正在加载数据</div>}
-      {error && <div className="state-box error-box">接口连接失败：{error}</div>}
-
-      {!loading && !error && (
+      {activeTab === "parameters" && (
         <>
-          <section className="phone-grid" aria-label="手机列表">
-            {visiblePhones.map((phone) => (
-              <article className="phone-card" key={phone.id}>
-                <div className="phone-image">
-                  {phone.image_url ? (
-                    <img src={phone.image_url} alt={phone.name} loading="lazy" />
-                  ) : (
-                    <MonitorSmartphone size={32} />
-                  )}
-                </div>
-                <div className="phone-content">
-                  <div className="phone-title-row">
-                    <h2>{phone.name}</h2>
-                    <span className="brand-chip">{phone.brand}</span>
-                  </div>
-                  <p className="specs">{phone.specs || "暂无规格"}</p>
-                  <div className="phone-meta">
-                    <span>{formatPrice(phone.price)}</span>
-                    <span>{formatScore(phone.score)} 分</span>
-                    <span>{phone.version_count || 0} 个版本</span>
-                  </div>
-                  <div className="phone-actions">
-                    <button
-                      className="text-button"
-                      type="button"
-                      onClick={() => void openVersions(phone)}
-                      disabled={!phone.version_count}
-                    >
-                      <SlidersHorizontal size={14} />
-                      版本参数
-                    </button>
-                    {phone.source_url && (
-                      <a
-                        className="source-link"
-                        href={phone.source_url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        酷安 #{phone.source_product_id}
-                        <ExternalLink size={14} />
-                      </a>
-                    )}
-                  </div>
-                </div>
-              </article>
-            ))}
+          <section className="toolbar" aria-label="筛选工具">
+            <label className="search-field">
+              <Search size={18} />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="搜索型号、品牌、芯片、电池"
+              />
+            </label>
+
+            <label className="select-field">
+              <span>品牌</span>
+              <select value={brand} onChange={(event) => setBrand(event.target.value)}>
+                <option value="all">全部品牌</option>
+                {brands.map(([name, count]) => (
+                  <option key={name} value={name}>
+                    {name} ({count})
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="select-field">
+              <span>排序</span>
+              <select
+                value={sortKey}
+                onChange={(event) => setSortKey(event.target.value as SortKey)}
+              >
+                <option value="release_desc">发布时间降序</option>
+                <option value="score">评分最高</option>
+                <option value="price_asc">价格从低到高</option>
+                <option value="price_desc">价格从高到低</option>
+                <option value="name">名称</option>
+              </select>
+            </label>
+
+            <button className="icon-button" onClick={() => void loadPhones()} type="button">
+              <RefreshCw size={18} />
+              刷新
+            </button>
+            <button
+              className="icon-button secondary-button"
+              onClick={() => void syncCoolapkOnce()}
+              type="button"
+              disabled={syncing}
+            >
+              <RefreshCw size={18} />
+              {syncing ? "同步中" : "同步酷安"}
+            </button>
           </section>
 
-          {visibleCount < filteredPhones.length && (
-            <div className="load-more-row">
-              <button
-                className="load-more"
-                type="button"
-                onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
-              >
-                加载更多
-              </button>
+          {syncMessage && <div className="sync-message">{syncMessage}</div>}
+
+          <section className="result-header" aria-label="列表状态">
+            <div>
+              <strong>{filteredPhones.length.toLocaleString("zh-CN")}</strong>
+              <span> 条结果</span>
             </div>
+            <span className="muted">
+              <ArrowDownUp size={15} /> {sortLabel(sortKey)}
+            </span>
+          </section>
+
+          {loading && <div className="state-box">正在加载数据</div>}
+          {error && <div className="state-box error-box">接口连接失败：{error}</div>}
+
+          {!loading && !error && (
+            <>
+              <section className="phone-grid" aria-label="手机列表">
+                {visiblePhones.map((phone) => (
+                  <article className="phone-card" key={phone.id}>
+                    <div className="phone-image">
+                      {phone.image_url ? (
+                        <img src={phone.image_url} alt={phone.name} loading="lazy" />
+                      ) : (
+                        <MonitorSmartphone size={32} />
+                      )}
+                    </div>
+                    <div className="phone-content">
+                      <div className="phone-title-row">
+                        <h2>{phone.name}</h2>
+                        <span className="brand-chip">{phone.brand}</span>
+                      </div>
+                      <p className="specs">{phone.specs || "暂无规格"}</p>
+                      <div className="phone-meta">
+                        <span>{formatPrice(phone.price)}</span>
+                        <span>{formatScore(phone.score)} 分</span>
+                        <span>{phone.version_count || 0} 个版本</span>
+                      </div>
+                      <div className="phone-actions">
+                        <button
+                          className="text-button"
+                          type="button"
+                          onClick={() => void openVersions(phone)}
+                          disabled={!phone.version_count}
+                        >
+                          <SlidersHorizontal size={14} />
+                          版本参数
+                        </button>
+                        {phone.source_url && (
+                          <a
+                            className="source-link"
+                            href={phone.source_url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            酷安 #{phone.source_product_id}
+                            <ExternalLink size={14} />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </section>
+
+              {visibleCount < filteredPhones.length && (
+                <div className="load-more-row">
+                  <button
+                    className="load-more"
+                    type="button"
+                    onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+                  >
+                    加载更多
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </>
       )}
