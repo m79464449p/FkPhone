@@ -1,0 +1,61 @@
+name: Deploy staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: Branch, tag, or commit to deploy
+        required: true
+        default: main
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to staging server
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      DEPLOY_PATH: /opt/fkphone
+    steps:
+      - name: Checkout selected ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_ref }}
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          install -m 600 /dev/null ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Sync files to server
+        run: |
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude '.env' \
+            --exclude '.env.*' \
+            --exclude '.goofish-profile/' \
+            --exclude '.goofish-cookies.json' \
+            --exclude 'node_modules/' \
+            --exclude 'frontend/dist/' \
+            -e "ssh -i ~/.ssh/deploy_key" \
+            ./ "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${DEPLOY_PATH}/"
+
+      - name: Validate compose file on server
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+            "cd ${DEPLOY_PATH} && docker compose -f deploy/docker-compose.yml config"
+
+      - name: Deploy on server
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+            "cd ${DEPLOY_PATH} && docker compose -f deploy/docker-compose.yml up -d --build"
+
+      - name: Show service status
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+            "cd ${DEPLOY_PATH} && docker compose -f deploy/docker-compose.yml ps"
