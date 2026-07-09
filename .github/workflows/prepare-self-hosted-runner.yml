@@ -1,0 +1,68 @@
+name: Prepare self-hosted runner package
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: prepare-self-hosted-runner-package
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Download and upload runner package
+    runs-on: ubuntu-latest
+    env:
+      RUNNER_VERSION: 2.335.1
+      RUNNER_SHA256: 4ef2f25285f0ae4477f1fe1e346db76d2f3ebf03824e2ddd1973a2819bf6c8cf
+      REMOTE_PACKAGE_DIR: /opt/fkphone/bootstrap
+    steps:
+      - name: Check required secrets
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          if [ -z "$SERVER_HOST" ]; then
+            echo "::error::Missing required secret: SERVER_HOST"
+            exit 1
+          fi
+
+          if [ -z "$SERVER_SSH_KEY" ]; then
+            echo "::error::Missing required secret: SERVER_SSH_KEY"
+            exit 1
+          fi
+
+          if [ -z "$SERVER_USER" ]; then
+            echo "::error::Missing required secret: SERVER_USER"
+            exit 1
+          fi
+
+      - name: Download runner package
+        run: |
+          curl -fL \
+            -o "actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz" \
+            "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz"
+
+      - name: Verify runner package
+        run: |
+          echo "${RUNNER_SHA256}  actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz" | sha256sum -c -
+
+      - name: Setup SSH
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          install -m 600 /dev/null ~/.ssh/deploy_key
+          printf '%s\n' "$SERVER_SSH_KEY" > ~/.ssh/deploy_key
+          ssh-keyscan -T 10 -H "$SERVER_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload package to server
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" "mkdir -p '${REMOTE_PACKAGE_DIR}'"
+          scp -i ~/.ssh/deploy_key \
+            "actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz" \
+            "${SERVER_USER}@${SERVER_HOST}:${REMOTE_PACKAGE_DIR}/"

@@ -26,11 +26,33 @@ jobs:
           ref: ${{ inputs.git_ref }}
 
       - name: Setup SSH
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
         run: |
+          if [ -z "$SERVER_HOST" ]; then
+            echo "::error::Missing required secret: SERVER_HOST"
+            exit 1
+          fi
+
+          if [ -z "$SERVER_SSH_KEY" ]; then
+            echo "::error::Missing required secret: SERVER_SSH_KEY"
+            exit 1
+          fi
+
+          if [ -z "$SERVER_USER" ]; then
+            echo "::error::Missing required secret: SERVER_USER"
+            exit 1
+          fi
+
           mkdir -p ~/.ssh
           install -m 600 /dev/null ~/.ssh/deploy_key
-          printf '%s\n' "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/deploy_key
-          ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts
+          printf '%s\n' "$SERVER_SSH_KEY" > ~/.ssh/deploy_key
+          ssh-keyscan -T 10 -H "$SERVER_HOST" >> ~/.ssh/known_hosts || {
+            echo "::error::Unable to scan SSH host key for SERVER_HOST=$SERVER_HOST. Check the host, DNS, firewall, and port 22 access from GitHub Actions."
+            exit 1
+          }
 
       - name: Sync files to server
         run: |
