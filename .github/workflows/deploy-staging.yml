@@ -23,69 +23,21 @@ jobs:
   deploy:
     name: Deploy to staging server
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
-    runs-on: ubuntu-latest
+    runs-on:
+      - self-hosted
+      - fkphone
     environment: staging
-    env:
-      DEPLOY_PATH: /opt/fkphone
     steps:
       - name: Checkout selected ref
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.git_ref || github.event.workflow_run.head_sha }}
 
-      - name: Setup SSH
-        env:
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}
-          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
-          SERVER_USER: ${{ secrets.SERVER_USER }}
-        run: |
-          if [ -z "$SERVER_HOST" ]; then
-            echo "::error::Missing required secret: SERVER_HOST"
-            exit 1
-          fi
+      - name: Validate compose file
+        run: docker compose -f deploy/docker-compose.yml config
 
-          if [ -z "$SERVER_SSH_KEY" ]; then
-            echo "::error::Missing required secret: SERVER_SSH_KEY"
-            exit 1
-          fi
-
-          if [ -z "$SERVER_USER" ]; then
-            echo "::error::Missing required secret: SERVER_USER"
-            exit 1
-          fi
-
-          mkdir -p ~/.ssh
-          install -m 600 /dev/null ~/.ssh/deploy_key
-          printf '%s\n' "$SERVER_SSH_KEY" > ~/.ssh/deploy_key
-          ssh-keyscan -T 10 -H "$SERVER_HOST" >> ~/.ssh/known_hosts || {
-            echo "::error::Unable to scan SSH host key for SERVER_HOST=$SERVER_HOST. Check the host, DNS, firewall, and port 22 access from GitHub Actions."
-            exit 1
-          }
-
-      - name: Sync files to server
-        run: |
-          rsync -az --delete \
-            --exclude '.git/' \
-            --exclude '.env' \
-            --exclude '.env.*' \
-            --exclude '.goofish-profile/' \
-            --exclude '.goofish-cookies.json' \
-            --exclude 'node_modules/' \
-            --exclude 'frontend/dist/' \
-            -e "ssh -i ~/.ssh/deploy_key" \
-            ./ "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${DEPLOY_PATH}/"
-
-      - name: Validate compose file on server
-        run: |
-          ssh -i ~/.ssh/deploy_key "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
-            "cd ${DEPLOY_PATH} && docker compose -f deploy/docker-compose.yml config"
-
-      - name: Deploy on server
-        run: |
-          ssh -i ~/.ssh/deploy_key "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
-            "cd ${DEPLOY_PATH} && docker compose -f deploy/docker-compose.yml up -d --build"
+      - name: Deploy
+        run: docker compose -f deploy/docker-compose.yml up -d --build
 
       - name: Show service status
-        run: |
-          ssh -i ~/.ssh/deploy_key "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
-            "cd ${DEPLOY_PATH} && docker compose -f deploy/docker-compose.yml ps"
+        run: docker compose -f deploy/docker-compose.yml ps

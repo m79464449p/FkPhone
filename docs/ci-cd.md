@@ -1,7 +1,7 @@
 # CI/CD
 
-This project uses GitHub Actions for CI and an SSH-based deployment to the
-staging server.
+This project uses GitHub Actions with a self-hosted runner on the staging
+server.
 
 ## Workflows
 
@@ -13,48 +13,33 @@ staging server.
   - Manual `Run workflow` remains available as a fallback.
   - Choose a branch, tag, or commit when running it manually.
 
-## GitHub secrets
-
-Create these repository secrets before running `Deploy staging`:
-
-```text
-SERVER_HOST=47.116.116.42
-SERVER_USER=fkphone-deploy
-SERVER_SSH_KEY=<private deploy key>
-```
-
-The private deploy key is stored on the server at:
-
-```text
-/root/fkphone_actions_deploy_key
-```
-
-To show it while logged in as `root`:
-
-```bash
-cat /root/fkphone_actions_deploy_key
-```
-
-Add the whole key, including the `BEGIN OPENSSH PRIVATE KEY` and
-`END OPENSSH PRIVATE KEY` lines, as `SERVER_SSH_KEY`.
-
 ## Server setup
 
-The server needs Docker, Docker Compose, and rsync:
+The server needs Docker, Docker Compose, Node.js, Python, and the GitHub
+self-hosted runner service:
 
 ```bash
 docker --version
 docker compose version
-rsync --version
+node --version
+python3 --version
+systemctl status actions.runner.m79464449p-FkPhone.fkphone-server.service
 ```
 
-The deployment user is `fkphone-deploy`, and the application is synced to
-`/opt/fkphone`.
+The runner service is installed as `github-runner` and uses the `fkphone` label.
+Workflows that should run on this server use:
+
+```yaml
+runs-on:
+  - self-hosted
+  - fkphone
+```
 
 ## Recommended usage while testing
 
 - Push to `dev` to verify builds without deployment.
-- Push to `main` to run CI, then deploy automatically after CI succeeds.
+- Push to `main` to run CI on the self-hosted runner, then deploy automatically
+  on the same server after CI succeeds.
 - Use the manual `Deploy staging` workflow when you need to redeploy a specific
   branch, tag, or commit.
 - Keep `main` protected once the flow is stable.
