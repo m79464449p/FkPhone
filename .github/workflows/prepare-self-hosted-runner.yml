@@ -1,6 +1,11 @@
 name: Prepare self-hosted runner package
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/prepare-self-hosted-runner.yml
   workflow_dispatch:
 
 concurrency:
