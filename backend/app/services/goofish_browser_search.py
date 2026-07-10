@@ -138,7 +138,19 @@ def try_mtop_existing_session(playwright, profile_dir: Path, keywords: list[str]
         try:
             for keyword in keywords:
                 all_listings.extend(mtop_search_keyword(cookie_jar, keyword, max_results))
-        except (URLError, TimeoutError, ValueError) as exc:
+        except ValueError as exc:
+            if is_mtop_token_expired_message(str(exc)) and refresh_mtop_token_with_browser(playwright, cookie_jar):
+                try:
+                    all_listings = []
+                    for keyword in keywords:
+                        all_listings.extend(mtop_search_keyword(cookie_jar, keyword, max_results))
+                except (URLError, TimeoutError, ValueError) as retry_exc:
+                    print(f"Goofish mtop search failed with refreshed {source} cookies: {retry_exc}", file=sys.stderr, flush=True)
+                    continue
+            else:
+                print(f"Goofish mtop search failed with {source} cookies: {exc}", file=sys.stderr, flush=True)
+                continue
+        except (URLError, TimeoutError) as exc:
             print(f"Goofish mtop search failed with {source} cookies: {exc}", file=sys.stderr, flush=True)
             continue
 
@@ -335,6 +347,66 @@ def refresh_mtop_token(cookie_jar: dict[str, str], api: str, referer: str) -> bo
     return refreshed
 
 
+def refresh_mtop_token_with_browser(playwright, cookie_jar: dict[str, str]) -> bool:
+    previous_token = cookie_jar.get("_m_h5_tk")
+    browser = playwright.chromium.launch(headless=True, args=["--disable-dev-shm-usage", "--no-sandbox"])
+    context = browser.new_context(viewport={"width": 1440, "height": 1000})
+    try:
+        refresh_cookie_jar = {
+            name: value
+            for name, value in cookie_jar.items()
+            if name not in {"_m_h5_tk", "_m_h5_tk_enc"}
+        }
+        context.add_cookies(build_browser_cookies(refresh_cookie_jar))
+        page = context.new_page()
+        page.goto("https://www.goofish.com/search?q=turbo5max", wait_until="domcontentloaded", timeout=30000)
+        page.wait_for_timeout(3000)
+        page.goto(build_mtop_token_probe_url(), wait_until="domcontentloaded", timeout=30000)
+        page.wait_for_timeout(2000)
+        refreshed_cookies = context.cookies(["https://www.goofish.com", "https://h5api.m.goofish.com"])
+        for cookie in refreshed_cookies:
+            name = cookie.get("name")
+            value = cookie.get("value")
+            if name and value:
+                cookie_jar[name] = value
+    except PlaywrightError as exc:
+        print(f"Goofish browser token refresh failed: {exc}", file=sys.stderr, flush=True)
+        return False
+    finally:
+        context.close()
+        browser.close()
+
+    refreshed = bool(cookie_jar.get("_m_h5_tk") and cookie_jar.get("_m_h5_tk") != previous_token)
+    if refreshed:
+        write_cookie_file(cookie_jar)
+    return refreshed
+
+
+def build_browser_cookies(cookie_jar: dict[str, str]) -> list[dict[str, str]]:
+    cookies: list[dict[str, str]] = []
+    for name, value in cookie_jar.items():
+        cookies.append({"name": name, "value": value, "url": "https://www.goofish.com"})
+        cookies.append({"name": name, "value": value, "url": "https://h5api.m.goofish.com"})
+    return cookies
+
+
+def build_mtop_token_probe_url() -> str:
+    params = {
+        "jsv": "2.7.3",
+        "appKey": "34839810",
+        "t": str(int(time.time() * 1000)),
+        "sign": "0",
+        "api": "mtop.taobao.idlemtopsearch.pc.search",
+        "v": "1.0",
+        "type": "originaljson",
+        "dataType": "json",
+        "accountSite": "xianyu",
+        "timeout": "20000",
+        "data": "{}",
+    }
+    return "https://h5api.m.goofish.com/h5/mtop.taobao.idlemtopsearch.pc.search/1.0/?" + urlencode(params)
+
+
 def merge_response_cookies(cookie_jar: dict[str, str], set_cookie_headers: list[str]) -> None:
     for header in set_cookie_headers:
         cookies = SimpleCookie()
@@ -359,6 +431,10 @@ def write_cookie_file(cookie_jar: dict[str, str]) -> None:
 def is_mtop_token_expired(response: dict) -> bool:
     ret = response.get("ret") or []
     return any("TOKEN_EXOIRED" in str(item) or "TOKEN_EXPIRED" in str(item) for item in ret)
+
+
+def is_mtop_token_expired_message(value: str) -> bool:
+    return "TOKEN_EXOIRED" in value or "TOKEN_EXPIRED" in value
 
 
 def enrich_listing_counts(cookie_jar: dict[str, str], listing: Listing) -> None:
