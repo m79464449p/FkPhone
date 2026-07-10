@@ -154,11 +154,9 @@ def try_mtop_existing_session(playwright, profile_dir: Path, keywords: list[str]
     return None
 
 
-def read_cookie_candidates(playwright, profile_dir: Path) -> list[tuple[str, dict[str, str]]]:
-    return [
-        ("browser profile", read_cookie_jar(playwright, profile_dir)),
-        ("cookie file", read_cookie_file()),
-    ]
+def read_cookie_candidates(playwright, profile_dir: Path):
+    yield "cookie file", read_cookie_file()
+    yield "browser profile", read_cookie_jar(playwright, profile_dir)
 
 
 def read_cookie_jar(playwright, profile_dir: Path) -> dict[str, str]:
