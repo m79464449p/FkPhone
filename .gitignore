@@ -37,6 +37,7 @@ data/
 tmp/
 downloads/
 .goofish-profile/
+.goofish-profile-dev/
 .goofish-cookies.json
 
 # Docker / deploy
