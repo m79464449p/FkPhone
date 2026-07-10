@@ -109,6 +109,8 @@ type GoofishSpec = {
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 const PAGE_SIZE = 48;
+const STORAGE_FILTER_OPTIONS = ["32GB", "64GB", "128GB", "256GB", "512GB", "1TB", "2TB"];
+const RAM_FILTER_OPTIONS = ["2GB", "3GB", "4GB", "6GB", "8GB", "12GB", "16GB", "18GB", "24GB", "32GB"];
 
 function formatPrice(price: number | null) {
   if (price == null) return "暂无价格";
@@ -141,6 +143,8 @@ function App() {
   const [compareOpen, setCompareOpen] = useState(false);
   const [goofishKeywordInput, setGoofishKeywordInput] = useState("turbo5max, tubro5max");
   const [goofishFilterKeyword, setGoofishFilterKeyword] = useState("turbo5max");
+  const [goofishStorageFilter, setGoofishStorageFilter] = useState("256GB");
+  const [goofishRamFilter, setGoofishRamFilter] = useState("12GB");
   const [goofishListings, setGoofishListings] = useState<GoofishListing[]>([]);
   const [goofishLoading, setGoofishLoading] = useState(false);
   const [goofishSearching, setGoofishSearching] = useState(false);
@@ -469,6 +473,13 @@ function App() {
   }, [phones, query, brand, sortKey]);
 
   const visiblePhones = filteredPhones.slice(0, visibleCount);
+  const filteredGoofishListings = useMemo(
+    () =>
+      goofishListings.filter((listing) =>
+        matchesGoofishSpecFilters(listing, goofishStorageFilter, goofishRamFilter)
+      ),
+    [goofishListings, goofishStorageFilter, goofishRamFilter]
+  );
   const pricedPhones = phones.filter((phone) => phone.price != null);
   const averagePrice =
     pricedPhones.reduce((sum, phone) => sum + (phone.price ?? 0), 0) /
@@ -539,7 +550,9 @@ function App() {
         <GoofishPanel
           keywordInput={goofishKeywordInput}
           filterKeyword={goofishFilterKeyword}
-          listings={goofishListings}
+          storageFilter={goofishStorageFilter}
+          ramFilter={goofishRamFilter}
+          listings={filteredGoofishListings}
           loading={goofishLoading}
           searching={goofishSearching}
           searchElapsedSeconds={goofishSearchElapsedSeconds}
@@ -547,6 +560,8 @@ function App() {
           error={goofishError}
           onKeywordInputChange={setGoofishKeywordInput}
           onFilterKeywordChange={setGoofishFilterKeyword}
+          onStorageFilterChange={setGoofishStorageFilter}
+          onRamFilterChange={setGoofishRamFilter}
           onSearch={() => void searchGoofish()}
           onCancelSearch={() => void cancelGoofishSearch()}
           onRefresh={() => void loadGoofishListings()}
@@ -736,6 +751,8 @@ function Metric({ label, value }: { label: string; value: string }) {
 function GoofishPanel({
   keywordInput,
   filterKeyword,
+  storageFilter,
+  ramFilter,
   listings,
   loading,
   searching,
@@ -744,6 +761,8 @@ function GoofishPanel({
   error,
   onKeywordInputChange,
   onFilterKeywordChange,
+  onStorageFilterChange,
+  onRamFilterChange,
   onSearch,
   onCancelSearch,
   onRefresh,
@@ -751,6 +770,8 @@ function GoofishPanel({
 }: {
   keywordInput: string;
   filterKeyword: string;
+  storageFilter: string;
+  ramFilter: string;
   listings: GoofishListing[];
   loading: boolean;
   searching: boolean;
@@ -759,6 +780,8 @@ function GoofishPanel({
   error: string;
   onKeywordInputChange: (value: string) => void;
   onFilterKeywordChange: (value: string) => void;
+  onStorageFilterChange: (value: string) => void;
+  onRamFilterChange: (value: string) => void;
   onSearch: () => void;
   onCancelSearch: () => void;
   onRefresh: () => void;
@@ -817,6 +840,36 @@ function GoofishPanel({
           <Trash2 size={18} />
           清空登录态
         </button>
+      </div>
+      <div className="goofish-filter-row" aria-label="闲鱼筛选条件">
+        <label className="spec-filter-field">
+          <span>存储容量</span>
+          <select
+            value={storageFilter}
+            onChange={(event) => onStorageFilterChange(event.target.value)}
+          >
+            <option value="">全部</option>
+            {STORAGE_FILTER_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="spec-filter-field">
+          <span>运行内存</span>
+          <select
+            value={ramFilter}
+            onChange={(event) => onRamFilterChange(event.target.value)}
+          >
+            <option value="">全部</option>
+            {RAM_FILTER_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {message && <div className="sync-message">{message}</div>}
@@ -1230,6 +1283,26 @@ function inferGoofishSpecs(listing: GoofishListing): GoofishSpec[] {
     { label: "拆修和功能", value: inferGoofishRepair(text) }
   ];
   return specs;
+}
+
+function matchesGoofishSpecFilters(listing: GoofishListing, storageFilter: string, ramFilter: string) {
+  const filters = {
+    storage: normalizeSpecFilter(storageFilter),
+    ram: normalizeSpecFilter(ramFilter)
+  };
+  if (!filters.storage && !filters.ram) return true;
+
+  const specs = inferGoofishSpecs(listing);
+  const storage = normalizeSpecFilter(specs.find((spec) => spec.label === "存储容量")?.value ?? "");
+  const ram = normalizeSpecFilter(specs.find((spec) => spec.label === "运行内存")?.value ?? "");
+
+  return (!filters.storage || storage === filters.storage) && (!filters.ram || ram === filters.ram);
+}
+
+function normalizeSpecFilter(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "未知") return "";
+  return normalizeStorage(trimmed);
 }
 
 function inferGoofishBrand(text: string) {

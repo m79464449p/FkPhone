@@ -199,14 +199,57 @@ h1 {
 
 .goofish-controls {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) auto 220px auto;
+  grid-template-columns: minmax(260px, 1fr) auto minmax(180px, 240px) auto auto;
   gap: 10px;
   align-items: center;
+  margin-bottom: 10px;
+}
+
+.goofish-filter-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 240px));
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
   margin-bottom: 12px;
+  background: #f7fafb;
+  border: 1px solid #dce4ea;
+  border-radius: 8px;
 }
 
 .compact-field {
   min-width: 0;
+}
+
+.spec-filter-field {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 42px;
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid #d8e0e7;
+  border-radius: 8px;
+}
+
+.spec-filter-field span {
+  flex: 0 0 auto;
+  padding: 0 10px;
+  color: #6b7785;
+  font-size: 13px;
+  border-right: 1px solid #e2e8ee;
+}
+
+.spec-filter-field input,
+.spec-filter-field select {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  padding: 0 10px;
+  color: #17212b;
+  background: transparent;
+  border: 0;
+  outline: 0;
 }
 
 .error-message {
@@ -970,6 +1013,10 @@ h1 {
   .goofish-controls {
     grid-template-columns: minmax(220px, 1fr) auto;
   }
+
+  .goofish-filter-row {
+    grid-template-columns: repeat(2, minmax(160px, 1fr));
+  }
 }
 
 @media (max-width: 720px) {
@@ -1017,6 +1064,10 @@ h1 {
   }
 
   .goofish-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .goofish-filter-row {
     grid-template-columns: 1fr;
   }
 
