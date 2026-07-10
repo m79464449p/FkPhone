@@ -5,6 +5,7 @@ import re
 import ssl
 import sys
 import time
+from http.cookies import SimpleCookie
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.error import URLError
@@ -239,6 +240,10 @@ def request_mtop_detail(cookie_jar: dict[str, str], item_id: str) -> dict:
 
 
 def request_mtop_api(cookie_jar: dict[str, str], api: str, data: dict, referer: str) -> dict:
+    return request_mtop_api_once(cookie_jar, api, data, referer, allow_token_refresh=True)
+
+
+def request_mtop_api_once(cookie_jar: dict[str, str], api: str, data: dict, referer: str, allow_token_refresh: bool) -> dict:
     app_key = "34839810"
     token = cookie_jar.get("_m_h5_tk", "").split("_")[0]
     if not token:
@@ -276,8 +281,29 @@ def request_mtop_api(cookie_jar: dict[str, str], api: str, data: dict, referer: 
         method="GET",
     )
     with urlopen(request, timeout=20, context=ssl._create_unverified_context()) as response:
+        merge_response_cookies(cookie_jar, response.headers.get_all("Set-Cookie", []))
         payload = response.read().decode("utf-8", "replace")
-    return json.loads(payload)
+    parsed = json.loads(payload)
+    if allow_token_refresh and is_mtop_token_expired(parsed) and cookie_jar.get("_m_h5_tk"):
+        return request_mtop_api_once(cookie_jar, api, data, referer, allow_token_refresh=False)
+    return parsed
+
+
+def merge_response_cookies(cookie_jar: dict[str, str], set_cookie_headers: list[str]) -> None:
+    for header in set_cookie_headers:
+        cookies = SimpleCookie()
+        try:
+            cookies.load(header)
+        except Exception:
+            continue
+        for name, morsel in cookies.items():
+            if morsel.value:
+                cookie_jar[name] = morsel.value
+
+
+def is_mtop_token_expired(response: dict) -> bool:
+    ret = response.get("ret") or []
+    return any("TOKEN_EXOIRED" in str(item) or "TOKEN_EXPIRED" in str(item) for item in ret)
 
 
 def enrich_listing_counts(cookie_jar: dict[str, str], listing: Listing) -> None:
