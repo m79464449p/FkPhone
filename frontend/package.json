@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
+    "dev-local": "VITE_API_BASE_URL=http://127.0.0.1:8000 vite --host 0.0.0.0",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },

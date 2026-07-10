@@ -1,3 +1,5 @@
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,4 +21,5 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=("../.env", ".env"), extra="ignore")
 
 
-settings = Settings()
+env_file = os.getenv("FKPHONE_ENV_FILE")
+settings = Settings(_env_file=env_file if env_file else ("../.env", ".env"))
