@@ -141,8 +141,7 @@ function App() {
   const [compareLoading, setCompareLoading] = useState(false);
   const [compareError, setCompareError] = useState("");
   const [compareOpen, setCompareOpen] = useState(false);
-  const [goofishKeywordInput, setGoofishKeywordInput] = useState("turbo5max, tubro5max");
-  const [goofishFilterKeyword, setGoofishFilterKeyword] = useState("turbo5max");
+  const [goofishKeywordInput, setGoofishKeywordInput] = useState("");
   const [goofishStorageFilter, setGoofishStorageFilter] = useState("256GB");
   const [goofishRamFilter, setGoofishRamFilter] = useState("12GB");
   const [goofishListings, setGoofishListings] = useState<GoofishListing[]>([]);
@@ -265,12 +264,11 @@ function App() {
     }
   }
 
-  async function loadGoofishListings(keyword = goofishFilterKeyword) {
+  async function loadGoofishListings() {
     setGoofishLoading(true);
     setGoofishError("");
     try {
       const params = new URLSearchParams({ limit: "20" });
-      if (keyword.trim()) params.set("keyword", keyword.trim());
       const response = await fetch(`${API_BASE}/api/goofish/listings?${params.toString()}`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
@@ -320,9 +318,7 @@ function App() {
           ? result.message || "闲鱼需要重新登录。请在弹出的扫码窗口完成登录后重试。"
           : `闲鱼命中 ${result.matched} 条，新增 ${result.inserted}，更新 ${result.updated}`
       );
-      const nextKeyword = keywords[0] ?? "";
-      setGoofishFilterKeyword(nextKeyword);
-      await loadGoofishListings(nextKeyword);
+      await loadGoofishListings();
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         setGoofishMessage("已取消闲鱼搜索");
@@ -552,7 +548,6 @@ function App() {
       {activeTab === "goofish" && (
         <GoofishPanel
           keywordInput={goofishKeywordInput}
-          filterKeyword={goofishFilterKeyword}
           storageFilter={goofishStorageFilter}
           ramFilter={goofishRamFilter}
           listings={filteredGoofishListings}
@@ -562,7 +557,6 @@ function App() {
           message={goofishMessage}
           error={goofishError}
           onKeywordInputChange={setGoofishKeywordInput}
-          onFilterKeywordChange={setGoofishFilterKeyword}
           onStorageFilterChange={setGoofishStorageFilter}
           onRamFilterChange={setGoofishRamFilter}
           onSearch={() => void searchGoofish()}
@@ -753,7 +747,6 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function GoofishPanel({
   keywordInput,
-  filterKeyword,
   storageFilter,
   ramFilter,
   listings,
@@ -763,7 +756,6 @@ function GoofishPanel({
   message,
   error,
   onKeywordInputChange,
-  onFilterKeywordChange,
   onStorageFilterChange,
   onRamFilterChange,
   onSearch,
@@ -772,7 +764,6 @@ function GoofishPanel({
   onResetSession
 }: {
   keywordInput: string;
-  filterKeyword: string;
   storageFilter: string;
   ramFilter: string;
   listings: GoofishListing[];
@@ -782,7 +773,6 @@ function GoofishPanel({
   message: string;
   error: string;
   onKeywordInputChange: (value: string) => void;
-  onFilterKeywordChange: (value: string) => void;
   onStorageFilterChange: (value: string) => void;
   onRamFilterChange: (value: string) => void;
   onSearch: () => void;
@@ -790,6 +780,12 @@ function GoofishPanel({
   onRefresh: () => void;
   onResetSession: () => void;
 }) {
+  function handleKeywordKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter" || searching) return;
+    event.preventDefault();
+    onSearch();
+  }
+
   return (
     <section className="goofish-panel" aria-label="闲鱼搜索">
       <header className="goofish-header">
@@ -809,6 +805,7 @@ function GoofishPanel({
           <input
             value={keywordInput}
             onChange={(event) => onKeywordInputChange(event.target.value)}
+            onKeyDown={handleKeywordKeyDown}
             placeholder="关键词，用逗号分隔"
           />
         </label>
@@ -816,14 +813,6 @@ function GoofishPanel({
           <RefreshCw size={18} />
           {searching ? "等待登录/搜索" : "搜索闲鱼"}
         </button>
-        <label className="search-field compact-field">
-          <Search size={18} />
-          <input
-            value={filterKeyword}
-            onChange={(event) => onFilterKeywordChange(event.target.value)}
-            placeholder="列表关键词"
-          />
-        </label>
         <button
           className="icon-button secondary-button"
           type="button"
