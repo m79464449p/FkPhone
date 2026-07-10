@@ -1,5 +1,6 @@
 import json
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -44,6 +45,14 @@ class GoofishSearchResponse(BaseModel):
     matched: int
     login_required: bool = False
     message: str | None = None
+
+
+class GoofishSessionResetResponse(BaseModel):
+    status: str
+    cookie_file_removed: bool
+    profile_removed: bool
+    search_cancelled: bool
+    message: str
 
 
 @router.get("/listings", response_model=list[GoofishListing])
@@ -149,6 +158,20 @@ def cancel_goofish_search() -> dict[str, bool]:
     return {"cancelled": terminate_goofish_process()}
 
 
+@router.delete("/session", response_model=GoofishSessionResetResponse)
+def reset_goofish_session() -> GoofishSessionResetResponse:
+    search_cancelled = terminate_goofish_process()
+    cookie_file_removed = remove_path(resolve_app_path(settings.goofish_cookie_file))
+    profile_removed = remove_path(resolve_app_path(settings.goofish_profile_dir))
+    return GoofishSessionResetResponse(
+        status="ok",
+        cookie_file_removed=cookie_file_removed,
+        profile_removed=profile_removed,
+        search_cancelled=search_cancelled,
+        message="已清空服务器端闲鱼登录态。线上禁用了可视化登录窗口，重新登录需要导入有效 Cookie 或临时开启 GOOFISH_HEADLESS=false。",
+    )
+
+
 def terminate_goofish_process() -> bool:
     global goofish_process
 
@@ -167,6 +190,24 @@ def terminate_goofish_process() -> bool:
 
         goofish_process = None
         return True
+
+
+def resolve_app_path(value: str) -> Path:
+    path = Path(value)
+    return path if path.is_absolute() else Path(__file__).resolve().parents[2] / path
+
+
+def remove_path(path: Path) -> bool:
+    try:
+        if path.is_dir():
+            shutil.rmtree(path)
+            return True
+        if path.exists():
+            path.unlink()
+            return True
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"failed to remove {path}: {exc}") from exc
+    return False
 
 
 def normalize_keywords(keywords: list[str]) -> list[str]:

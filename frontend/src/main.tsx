@@ -347,6 +347,32 @@ function App() {
     }
   }
 
+  async function resetGoofishSession() {
+    setGoofishMessage("正在清空服务器端闲鱼登录态...");
+    setGoofishError("");
+    try {
+      const response = await fetch(`${API_BASE}/api/goofish/session`, { method: "DELETE" });
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(detail || `HTTP ${response.status}`);
+      }
+      const result = (await response.json()) as {
+        cookie_file_removed: boolean;
+        profile_removed: boolean;
+        search_cancelled: boolean;
+        message: string;
+      };
+      const removed = [
+        result.cookie_file_removed ? "Cookie 文件" : "",
+        result.profile_removed ? "浏览器 profile" : "",
+        result.search_cancelled ? "进行中的搜索" : ""
+      ].filter(Boolean);
+      setGoofishMessage(`${result.message}${removed.length ? ` 已清理：${removed.join("、")}` : " 当前没有可清理的登录态。"}`);
+    } catch (err) {
+      setGoofishError(err instanceof Error ? err.message : "清空登录态失败");
+    }
+  }
+
   function toggleCompareVersion(phone: Phone, version: PhoneVersion) {
     setCompareData(null);
     setCompareError("");
@@ -524,6 +550,7 @@ function App() {
           onSearch={() => void searchGoofish()}
           onCancelSearch={() => void cancelGoofishSearch()}
           onRefresh={() => void loadGoofishListings()}
+          onResetSession={() => void resetGoofishSession()}
         />
       )}
 
@@ -719,7 +746,8 @@ function GoofishPanel({
   onFilterKeywordChange,
   onSearch,
   onCancelSearch,
-  onRefresh
+  onRefresh,
+  onResetSession
 }: {
   keywordInput: string;
   filterKeyword: string;
@@ -734,6 +762,7 @@ function GoofishPanel({
   onSearch: () => void;
   onCancelSearch: () => void;
   onRefresh: () => void;
+  onResetSession: () => void;
 }) {
   return (
     <section className="goofish-panel" aria-label="闲鱼搜索">
@@ -777,6 +806,16 @@ function GoofishPanel({
         >
           <RefreshCw size={18} />
           {loading ? "刷新中" : "刷新列表"}
+        </button>
+        <button
+          className="icon-button secondary-button"
+          type="button"
+          onClick={onResetSession}
+          disabled={searching}
+          title="清空服务器端闲鱼 Cookie 和浏览器 profile"
+        >
+          <Trash2 size={18} />
+          清空登录态
         </button>
       </div>
 
