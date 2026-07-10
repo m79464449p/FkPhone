@@ -352,6 +352,9 @@ function App() {
   }
 
   async function resetGoofishSession() {
+    const confirmed = window.confirm("确定清空服务器端闲鱼登录态吗？清空后线上需要重新导入 Cookie，或临时开启可视化登录。");
+    if (!confirmed) return;
+
     setGoofishMessage("正在清空服务器端闲鱼登录态...");
     setGoofishError("");
     try {
