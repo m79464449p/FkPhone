@@ -284,9 +284,57 @@ def request_mtop_api_once(cookie_jar: dict[str, str], api: str, data: dict, refe
         merge_response_cookies(cookie_jar, response.headers.get_all("Set-Cookie", []))
         payload = response.read().decode("utf-8", "replace")
     parsed = json.loads(payload)
-    if allow_token_refresh and is_mtop_token_expired(parsed) and cookie_jar.get("_m_h5_tk"):
+    if allow_token_refresh and is_mtop_token_expired(parsed) and refresh_mtop_token(cookie_jar, api, referer):
         return request_mtop_api_once(cookie_jar, api, data, referer, allow_token_refresh=False)
     return parsed
+
+
+def refresh_mtop_token(cookie_jar: dict[str, str], api: str, referer: str) -> bool:
+    previous_token = cookie_jar.get("_m_h5_tk")
+    refresh_cookie_jar = {
+        name: value
+        for name, value in cookie_jar.items()
+        if name not in {"_m_h5_tk", "_m_h5_tk_enc"}
+    }
+    params = {
+        "jsv": "2.7.3",
+        "appKey": "34839810",
+        "t": str(int(time.time() * 1000)),
+        "sign": "0",
+        "api": api,
+        "v": "1.0",
+        "type": "originaljson",
+        "dataType": "json",
+        "accountSite": "xianyu",
+        "timeout": "20000",
+        "data": "{}",
+    }
+    request = Request(
+        f"https://h5api.m.goofish.com/h5/{api}/1.0/?" + urlencode(params),
+        headers={
+            "Cookie": "; ".join(f"{name}={value}" for name, value in refresh_cookie_jar.items()),
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
+            ),
+            "Referer": referer,
+            "Origin": "https://www.goofish.com",
+            "Accept": "application/json,text/plain,*/*",
+        },
+        method="GET",
+    )
+    try:
+        with urlopen(request, timeout=20, context=ssl._create_unverified_context()) as response:
+            merge_response_cookies(cookie_jar, response.headers.get_all("Set-Cookie", []))
+            response.read()
+    except (URLError, TimeoutError, OSError) as exc:
+        print(f"Goofish mtop token refresh failed: {exc}", file=sys.stderr, flush=True)
+        return False
+
+    refreshed = bool(cookie_jar.get("_m_h5_tk") and cookie_jar.get("_m_h5_tk") != previous_token)
+    if refreshed:
+        write_cookie_file(cookie_jar)
+    return refreshed
 
 
 def merge_response_cookies(cookie_jar: dict[str, str], set_cookie_headers: list[str]) -> None:
@@ -299,6 +347,15 @@ def merge_response_cookies(cookie_jar: dict[str, str], set_cookie_headers: list[
         for name, morsel in cookies.items():
             if morsel.value:
                 cookie_jar[name] = morsel.value
+
+
+def write_cookie_file(cookie_jar: dict[str, str]) -> None:
+    cookie_file = resolve_path(settings.goofish_cookie_file)
+    try:
+        cookie_file.parent.mkdir(parents=True, exist_ok=True)
+        cookie_file.write_text(json.dumps(cookie_jar, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError as exc:
+        print(f"Goofish refreshed cookie file could not be written: {exc}", file=sys.stderr, flush=True)
 
 
 def is_mtop_token_expired(response: dict) -> bool:
