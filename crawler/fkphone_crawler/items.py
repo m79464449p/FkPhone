@@ -7,6 +7,7 @@ class PhoneItem(scrapy.Item):
     source_product_id = scrapy.Field()
     name = scrapy.Field()
     brand = scrapy.Field()
+    series = scrapy.Field()
     score = scrapy.Field()
     price = scrapy.Field()
     specs = scrapy.Field()

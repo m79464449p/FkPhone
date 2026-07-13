@@ -28,6 +28,7 @@ class PostgresPhonePipeline:
 
             ALTER TABLE phones ADD COLUMN IF NOT EXISTS source TEXT;
             ALTER TABLE phones ADD COLUMN IF NOT EXISTS source_product_id TEXT;
+            ALTER TABLE phones ADD COLUMN IF NOT EXISTS series TEXT;
             ALTER TABLE phones ADD COLUMN IF NOT EXISTS price INTEGER;
             ALTER TABLE phones ADD COLUMN IF NOT EXISTS specs TEXT;
             ALTER TABLE phones ADD COLUMN IF NOT EXISTS image_url TEXT;
@@ -68,7 +69,7 @@ class PostgresPhonePipeline:
 
         existing = self.conn.execute(
             """
-            SELECT source, source_product_id, name, brand, score, price, specs, image_url, source_url
+            SELECT source, source_product_id, name, brand, series, score, price, specs, image_url, source_url
             FROM phones
             WHERE id = %s
             """,
@@ -79,6 +80,7 @@ class PostgresPhonePipeline:
             "source_product_id": item.get("source_product_id"),
             "name": item.get("name"),
             "brand": item.get("brand"),
+            "series": item.get("series"),
             "score": item.get("score"),
             "price": item.get("price"),
             "specs": item.get("specs"),
@@ -93,10 +95,10 @@ class PostgresPhonePipeline:
         self.conn.execute(
             """
             INSERT INTO phones (
-                id, source, source_product_id, name, brand, score, price, specs, image_url, source_url, updated_at
+                id, source, source_product_id, name, brand, series, score, price, specs, image_url, source_url, updated_at
             )
             VALUES (
-                %(id)s, %(source)s, %(source_product_id)s, %(name)s, %(brand)s, %(score)s,
+                %(id)s, %(source)s, %(source_product_id)s, %(name)s, %(brand)s, %(series)s, %(score)s,
                 %(price)s, %(specs)s, %(image_url)s, %(source_url)s, CURRENT_TIMESTAMP
             )
             ON CONFLICT (id) DO UPDATE SET
@@ -104,6 +106,7 @@ class PostgresPhonePipeline:
                 source_product_id = EXCLUDED.source_product_id,
                 name = EXCLUDED.name,
                 brand = EXCLUDED.brand,
+                series = EXCLUDED.series,
                 score = EXCLUDED.score,
                 price = EXCLUDED.price,
                 specs = EXCLUDED.specs,

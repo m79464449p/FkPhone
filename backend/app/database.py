@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS phones (
 
 ALTER TABLE phones ADD COLUMN IF NOT EXISTS source TEXT;
 ALTER TABLE phones ADD COLUMN IF NOT EXISTS source_product_id TEXT;
+ALTER TABLE phones ADD COLUMN IF NOT EXISTS series TEXT;
 ALTER TABLE phones ADD COLUMN IF NOT EXISTS price INTEGER;
 ALTER TABLE phones ADD COLUMN IF NOT EXISTS specs TEXT;
 ALTER TABLE phones ADD COLUMN IF NOT EXISTS image_url TEXT;
@@ -72,6 +73,28 @@ CREATE TABLE IF NOT EXISTS goofish_listing_matches (
 
 CREATE INDEX IF NOT EXISTS idx_goofish_listing_matches_keyword
 ON goofish_listing_matches (keyword, last_seen_at DESC);
+
+CREATE OR REPLACE FUNCTION rank_chip_text(chip_text TEXT)
+RETURNS INTEGER
+LANGUAGE SQL
+IMMUTABLE
+AS $$
+    SELECT CASE
+        WHEN chip_text ~* '(骁龙|snapdragon)[[:space:]]*8[[:space:]]*(至尊版|elite)[[:space:]]*(gen[[:space:]]*5|5)' THEN 120
+        WHEN chip_text ~* '(骁龙|snapdragon)[[:space:]]*8[[:space:]]*(至尊版|elite)' THEN 112
+        WHEN chip_text ~* '(骁龙|snapdragon)[[:space:]]*8[[:space:]]*gen[[:space:]]*3' THEN 100
+        WHEN chip_text ~* '(骁龙|snapdragon)[[:space:]]*8s[[:space:]]*gen[[:space:]]*4' THEN 96
+        WHEN chip_text ~* '天玑[[:space:]]*9500' THEN 116
+        WHEN chip_text ~* '天玑[[:space:]]*9400\\+?' THEN 106
+        WHEN chip_text ~* 'a19[[:space:]]*pro' THEN 118
+        WHEN chip_text ~* 'a19' THEN 105
+        WHEN chip_text ~* 'a18[[:space:]]*pro' THEN 108
+        WHEN chip_text ~* 'a18' THEN 98
+        WHEN chip_text ~* '麒麟[[:space:]]*9030' THEN 104
+        WHEN chip_text ~* '麒麟[[:space:]]*9020' THEN 92
+        ELSE 0
+    END
+$$;
 
 INSERT INTO phones (id, name, brand, score)
 VALUES

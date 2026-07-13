@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
@@ -10,6 +12,7 @@ class PhoneSummary(BaseModel):
     id: str
     name: str
     brand: str
+    series: str | None = None
     score: int
     source: str | None = None
     source_product_id: str | None = None
@@ -50,8 +53,29 @@ class PhoneCompare(BaseModel):
     rows: list[CompareRow]
 
 
+class PhoneSpecFilterValue(BaseModel):
+    value: str
+    phone_count: int
+    version_count: int
+
+
+class PhoneSpecFilter(BaseModel):
+    key: str
+    group: str
+    subgroup: str
+    name: str
+    label: str
+    phone_count: int
+    values: list[PhoneSpecFilterValue]
+
+
 @router.get("", response_model=list[PhoneSummary])
-def list_phones() -> list[PhoneSummary]:
+def list_phones(
+    spec_filter: list[str] = Query(default=[]),
+    performance_floor: str = "",
+) -> list[PhoneSummary]:
+    spec_filters = parse_spec_filters(spec_filter)
+    min_performance_rank = performance_floor_rank(performance_floor)
     with get_connection() as conn:
         rows = conn.execute(
             """
@@ -59,6 +83,7 @@ def list_phones() -> list[PhoneSummary]:
                 p.id,
                 p.name,
                 p.brand,
+                p.series,
                 p.score,
                 p.source,
                 p.source_product_id,
@@ -69,12 +94,102 @@ def list_phones() -> list[PhoneSummary]:
                 COUNT(v.config_id)::int AS version_count
             FROM phones p
             LEFT JOIN phone_versions v ON v.phone_id = p.id
+            WHERE (
+                %(spec_filters)s::jsonb = '[]'::jsonb
+                OR NOT EXISTS (
+                    SELECT 1
+                    FROM jsonb_to_recordset(%(spec_filters)s::jsonb) AS selected_filter(key text, value text)
+                    WHERE NOT EXISTS (
+                        SELECT 1
+                        FROM phone_versions filter_version
+                        CROSS JOIN LATERAL jsonb_array_elements(filter_version.specs) AS spec
+                        WHERE filter_version.phone_id = p.id
+                          AND CONCAT(
+                              COALESCE(spec->>'group', ''),
+                              CHR(31),
+                              COALESCE(spec->>'subgroup', ''),
+                              CHR(31),
+                              COALESCE(spec->>'name', '')
+                          ) = selected_filter.key
+                          AND COALESCE(spec->>'value', '') = selected_filter.value
+                    )
+                )
+            )
+            AND (
+                %(min_performance_rank)s = 0
+                OR rank_chip_text(COALESCE(p.specs, '')) >= %(min_performance_rank)s
+                OR EXISTS (
+                    SELECT 1
+                    FROM phone_versions performance_version
+                    CROSS JOIN LATERAL jsonb_array_elements(performance_version.specs) AS performance_spec
+                    WHERE performance_version.phone_id = p.id
+                      AND COALESCE(performance_spec->>'name', '') IN ('芯片', 'SoC型号', 'SoC 型号', '处理器', 'CPU型号')
+                      AND rank_chip_text(COALESCE(performance_spec->>'value', '')) >= %(min_performance_rank)s
+                )
+            )
             GROUP BY p.id
             ORDER BY p.updated_at DESC NULLS LAST, p.created_at DESC, p.id ASC
-            """
+            """,
+            {
+                "spec_filters": json.dumps(spec_filters, ensure_ascii=False),
+                "min_performance_rank": min_performance_rank,
+            },
         ).fetchall()
 
     return [PhoneSummary(**row) for row in rows]
+
+
+@router.get("/spec-filters", response_model=list[PhoneSpecFilter])
+def list_phone_spec_filters() -> list[PhoneSpecFilter]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                COALESCE(spec->>'group', '') AS group_name,
+                COALESCE(spec->>'subgroup', '') AS subgroup_name,
+                COALESCE(spec->>'name', '') AS spec_name,
+                COALESCE(spec->>'value', '') AS spec_value,
+                COUNT(DISTINCT v.phone_id)::int AS phone_count,
+                COUNT(DISTINCT v.config_id)::int AS version_count
+            FROM phone_versions v
+            CROSS JOIN LATERAL jsonb_array_elements(v.specs) AS spec
+            WHERE COALESCE(spec->>'name', '') <> ''
+              AND COALESCE(spec->>'value', '') <> ''
+            GROUP BY group_name, subgroup_name, spec_name, spec_value
+            ORDER BY spec_name ASC, phone_count DESC, spec_value ASC
+            """
+        ).fetchall()
+
+    filters_by_key: dict[str, PhoneSpecFilter] = {}
+    for row in rows:
+        group = row["group_name"]
+        subgroup = row["subgroup_name"]
+        name = row["spec_name"]
+        key = make_spec_key(group, subgroup, name)
+        if key not in filters_by_key:
+            filters_by_key[key] = PhoneSpecFilter(
+                key=key,
+                group=group,
+                subgroup=subgroup,
+                name=name,
+                label=make_spec_label(group, subgroup, name),
+                phone_count=0,
+                values=[],
+            )
+        spec_filter_item = filters_by_key[key]
+        spec_filter_item.phone_count += row["phone_count"]
+        spec_filter_item.values.append(
+            PhoneSpecFilterValue(
+                value=row["spec_value"],
+                phone_count=row["phone_count"],
+                version_count=row["version_count"],
+            )
+        )
+
+    return sorted(
+        filters_by_key.values(),
+        key=lambda item: (-sum(value.phone_count for value in item.values), item.label),
+    )
 
 
 @router.get("/compare", response_model=PhoneCompare)
@@ -159,6 +274,41 @@ def normalize_config_ids(config_ids: list[str]) -> list[str]:
 
 def normalize_spec_name(name: str) -> str:
     return " ".join(name.strip().casefold().split())
+
+
+def make_spec_key(group: str, subgroup: str, name: str) -> str:
+    return "\x1f".join([group.strip(), subgroup.strip(), name.strip()])
+
+
+def make_spec_label(group: str, subgroup: str, name: str) -> str:
+    parts = [part.strip() for part in [group, subgroup, name] if part.strip()]
+    return " / ".join(parts) if parts else name.strip()
+
+
+def parse_spec_filters(raw_filters: list[str]) -> list[dict[str, str]]:
+    parsed_filters: list[dict[str, str]] = []
+    seen = set()
+    for raw_filter in raw_filters:
+        key, separator, value = raw_filter.partition("=")
+        key = key.strip()
+        value = value.strip()
+        if not separator or not key or not value:
+            continue
+        identity = (key, value)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        parsed_filters.append({"key": key, "value": value})
+    return parsed_filters
+
+
+def performance_floor_rank(performance_floor: str) -> int:
+    ranks = {
+        "snapdragon_8_gen3": 100,
+        "snapdragon_8_elite": 110,
+        "snapdragon_8_elite_gen5": 120,
+    }
+    return ranks.get(performance_floor, 0)
 
 
 def build_compare_rows(
