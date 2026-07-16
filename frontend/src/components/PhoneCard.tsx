@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Phone } from "../types";
 import { normalizePhoneBrand } from "../utils/brand";
 import { formatPrice, formatScore } from "../utils/format";
+import { getDisplayImageUrl } from "../utils/images";
 
 type PhoneCardProps = {
   phone: Phone;
@@ -14,13 +15,14 @@ type PhoneCardProps = {
 export function PhoneCard({ phone, index = 0, onOpenVersions }: PhoneCardProps) {
   const normalizedBrand = normalizePhoneBrand(phone);
   const [imageFailed, setImageFailed] = useState(false);
-  const showImage = Boolean(phone.image_url && !imageFailed);
+  const displayImageUrl = getDisplayImageUrl(phone.image_url);
+  const showImage = Boolean(displayImageUrl && !imageFailed);
 
   return (
     <article className="phone-card" style={{ "--item-index": index } as CSSProperties}>
       <div className="phone-image">
         {showImage ? (
-          <img src={phone.image_url ?? ""} alt="" loading="lazy" onError={() => setImageFailed(true)} />
+          <img src={displayImageUrl ?? ""} alt="" loading="lazy" onError={() => setImageFailed(true)} />
         ) : (
           <MonitorSmartphone size={32} />
         )}
@@ -47,6 +49,7 @@ export function PhoneCard({ phone, index = 0, onOpenVersions }: PhoneCardProps) 
         <div className="phone-actions">
           <button
             className="text-button"
+            data-testid="open-versions"
             type="button"
             onClick={() => onOpenVersions(phone)}
             disabled={!phone.version_count}

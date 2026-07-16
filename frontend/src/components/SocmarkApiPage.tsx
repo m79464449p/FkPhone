@@ -23,6 +23,8 @@ type SocmarkCallResult = {
   base_url: string;
   url: string;
   request_payload: Record<string, unknown>;
+  request_body_text: string;
+  request_body_sent_text: string;
   request_headers: Record<string, string>;
   header_status: HeaderStatus[];
   status_code: number;
@@ -359,6 +361,12 @@ export function SocmarkApiPage() {
                   decrypted_body_text: result.decrypted_body_text ?? null
                 })}
               </pre>
+
+              <h3>请求体明文</h3>
+              <pre>{result.request_body_text || "{}"}</pre>
+
+              <h3>实际上游请求体</h3>
+              <pre>{result.request_body_sent_text || "(empty)"}</pre>
 
               <h3>响应 headers</h3>
               <pre>{prettyJson(result.response_headers)}</pre>

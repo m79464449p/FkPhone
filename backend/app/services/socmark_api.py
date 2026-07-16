@@ -160,10 +160,10 @@ ENDPOINTS: dict[str, SocmarkEndpoint] = {
 HEADER_NOTES = {
     "appstore": "APK 固定写入 default。",
     "dfagjakhaklhakljkj209r3h00hg": "客户端把服务端响应头 datastr 存到本地后，下次请求带回；页面默认使用 abcde，可覆盖。",
-    "fdaga93gogh20hagah0ghaklha": "APK 中来自本地 uniid；后端默认生成 UUID，可覆盖。",
+    "fdaga93gogh20hagah0ghaklha": "APK 中来自本地 uniid；后端默认按 APK 逻辑生成 MD5(UUID)，可覆盖。",
     "adfdjew9v0svjna": "已复现：AES/CBC/PKCS5Padding 加密 adafi1278819hfFMVdsvsla + 当前毫秒。",
     "rjvi320f34r3ngkdlasg02t": "已复现：AES/CBC/PKCS5Padding 加密固定串 djf023nv9023jr1q0fjaj02jlaghwh0。",
-    "edsafagv325421fa327das": "APK 中由 BatteryUtil.getBattery + RSA 生成；当前默认使用已 emu 得到的 dadgagahah。",
+    "edsafagv325421fa327das": "APK 中由 BatteryUtil.getBattery + RSA 生成；battery 长度小于 39 时会自动追加 5000000ms 时间偏移。",
     "vjdsu329yfh32ihf803290fh": "来自拦截器构造参数 b，APK 里通常是 jj.h(应用签名相关值)；可在高级参数里提供。",
     "eiwovndsh3rioy89fhi3r89g2e": "来自拦截器构造参数 c，APK 里通常是 jj.h(设备信息组合值)；可在高级参数里提供。",
     "fjkcvj9w0932tkahg0a": "APK 尝试加载动态 dex 的 com.test.mylibrary.TestUtil.test()；失败时回退 abcde。",
@@ -273,6 +273,10 @@ def _compact_optional_headers(values: dict[str, str | None]) -> dict[str, str]:
     return {key: value for key, value in values.items() if value is not None and value != ""}
 
 
+def _apk_default_uniid() -> str:
+    return MD5.new(str(uuid.uuid4()).encode("utf-8")).hexdigest()
+
+
 def build_reversed_headers(
     datastr: str | None = None,
     uniid: str | None = None,
@@ -288,13 +292,15 @@ def build_reversed_headers(
 ) -> dict[str, str]:
     timestamp = now_ms or int(time() * 1000)
     native_timestamp = timestamp + time_offset_ms
+    if battery_value and len(battery_value) < 39:
+        native_timestamp += 5_000_000
     headers = {
         "Accept": "application/json, text/plain, */*",
         "Content-Type": "application/json; charset=utf-8",
         "User-Agent": "okhttp/3.12.0",
         "appstore": "default",
         "dfagjakhaklhakljkj209r3h00hg": datastr or "abcde",
-        "fdaga93gogh20hagah0ghaklha": uniid or str(uuid.uuid4()),
+        "fdaga93gogh20hagah0ghaklha": uniid or _apk_default_uniid(),
         "adfdjew9v0svjna": _aes_cbc_base64(f"adafi1278819hfFMVdsvsla{timestamp}", AES_KEY_A, AES_IV_A),
         "rjvi320f34r3ngkdlasg02t": _aes_cbc_base64("djf023nv9023jr1q0fjaj02jlaghwh0", AES_KEY_B, AES_IV_B),
         "fjkcvj9w0932tkahg0a": dynamic_dex_value or "abcde",
@@ -394,10 +400,10 @@ def call_socmark_endpoint(
     normalized_base_url = _normalize_base_url(base_url)
     url = urljoin(normalized_base_url, endpoint.path)
     headers = _build_headers(datastr, uniid, extra_headers, apk_options)
-    body_text = ""
+    request_body_text = ""
     if endpoint.method == "POST":
-        body_text = json.dumps(payload or {}, ensure_ascii=False, separators=(",", ":"))
-    headers, body_bytes, response_private_key = _build_apk_transport(endpoint.method, headers, body_text)
+        request_body_text = json.dumps(payload or {}, ensure_ascii=False, separators=(",", ":"))
+    headers, body_bytes, response_private_key = _build_apk_transport(endpoint.method, headers, request_body_text)
 
     request = Request(url, data=body_bytes, headers=headers, method=endpoint.method)
     context = ssl._create_unverified_context()
@@ -433,6 +439,8 @@ def call_socmark_endpoint(
         "base_url": normalized_base_url,
         "url": url,
         "request_payload": payload or {},
+        "request_body_text": request_body_text,
+        "request_body_sent_text": body_bytes.decode("utf-8", errors="replace") if body_bytes else "",
         "request_headers": headers,
         "header_status": build_header_status(headers),
         "status_code": status_code,

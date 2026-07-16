@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import init_database
-from app.routers import crawl, goofish, health, phones, socmark
+from app.routers import crawl, goofish, health, images, phones, socmark
 
 
 @asynccontextmanager
@@ -34,3 +34,4 @@ app.include_router(phones.router, prefix=settings.api_prefix)
 app.include_router(crawl.router, prefix=settings.api_prefix)
 app.include_router(goofish.router, prefix=settings.api_prefix)
 app.include_router(socmark.router, prefix=settings.api_prefix)
+app.include_router(images.router, prefix=settings.api_prefix)

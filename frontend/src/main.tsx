@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { BadgeCheck, ChartNoAxesColumnIncreasing, CircleDollarSign, SearchCheck, ShoppingBag, Smartphone } from "lucide-react";
 import { API_BASE, PAGE_SIZE } from "./constants";
-import { AppHeader } from "./components/AppHeader";
 import { CompareDock } from "./components/CompareDock";
 import { ComparePanel } from "./components/ComparePanel";
 import { GoofishPanel } from "./components/GoofishPanel";
@@ -552,32 +551,34 @@ function App({ onOpenSocmark }: AppProps) {
           }
         ];
 
+  const workspaceOverview = (
+    <section className="workspace-control-row" aria-label="工作区控制">
+      <WorkspaceTabs
+        activeTab={activeTab}
+        phoneCount={phones.length}
+        goofishCount={goofishListings.length}
+        onChange={setActiveTab}
+      />
+
+      <section className="summary-grid" aria-label="数据概览">
+        {metricCards.map((metric, index) => (
+          <MetricCard
+            key={metric.label}
+            label={metric.label}
+            value={metric.value}
+            detail={metric.detail}
+            icon={metric.icon}
+            tone={metric.tone}
+            index={index}
+          />
+        ))}
+      </section>
+    </section>
+  );
+
   return (
     <main className="app-shell">
-      <AppHeader syncing={syncing} onSync={() => void syncCoolapkOnce()} onOpenSocmark={onOpenSocmark} />
-
-      <section className="workspace-control-row" aria-label="工作区控制">
-        <WorkspaceTabs
-          activeTab={activeTab}
-          phoneCount={phones.length}
-          goofishCount={goofishListings.length}
-          onChange={setActiveTab}
-        />
-
-        <section className="summary-grid" aria-label="数据概览">
-          {metricCards.map((metric, index) => (
-            <MetricCard
-              key={metric.label}
-              label={metric.label}
-              value={metric.value}
-              detail={metric.detail}
-              icon={metric.icon}
-              tone={metric.tone}
-              index={index}
-            />
-          ))}
-        </section>
-      </section>
+      {activeTab === "goofish" && workspaceOverview}
 
       {activeTab === "goofish" && (
         <GoofishPanel
@@ -605,10 +606,9 @@ function App({ onOpenSocmark }: AppProps) {
           <section className="results-workspace" aria-label="参数结果">
             <PhoneToolbar
               query={query}
-            brand={brand}
-            series={series}
-            sortKey={sortKey}
-            performanceFloor={performanceFloor}
+              brand={brand}
+              series={series}
+              sortKey={sortKey}
               brands={brands}
               seriesOptions={seriesOptions}
               specFilterOptions={specFilterOptions}
@@ -617,17 +617,18 @@ function App({ onOpenSocmark }: AppProps) {
               pendingSpecValue={pendingSpecValue}
               specFiltersLoading={specFiltersLoading}
               syncing={syncing}
+              headerContent={workspaceOverview}
               onQueryChange={setQuery}
-            onBrandChange={setBrand}
-            onSeriesChange={setSeries}
-            onSortChange={setSortKey}
-            onPerformanceFloorChange={setPerformanceFloor}
+              onBrandChange={setBrand}
+              onSeriesChange={setSeries}
+              onSortChange={setSortKey}
               onPendingSpecKeyChange={changePendingSpecKey}
               onPendingSpecValueChange={setPendingSpecValue}
               onAddSpecFilter={addSpecFilter}
               onRemoveSpecFilter={removeSpecFilter}
-            onRefresh={() => void loadPhones(selectedSpecFilters, performanceFloor)}
+              onRefresh={() => void loadPhones(selectedSpecFilters, performanceFloor)}
               onSync={() => void syncCoolapkOnce()}
+              onOpenSocmark={onOpenSocmark}
               onClear={() => {
                 setQuery("");
                 setBrand("all");
@@ -669,7 +670,7 @@ function App({ onOpenSocmark }: AppProps) {
         />
       )}
 
-      {compareSelection.length > 0 && (
+      {compareSelection.length > 0 && !selectedPhone && (
         <CompareDock
           selection={compareSelection}
           onOpen={() => setCompareOpen(true)}

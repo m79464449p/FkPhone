@@ -1,12 +1,12 @@
-import { ChevronDown, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
-import type { PerformanceFloor, PhoneSpecFilter, SelectedSpecFilter, SortKey } from "../types";
+import { Braces, ChevronDown, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
+import type { ReactNode } from "react";
+import type { PhoneSpecFilter, SelectedSpecFilter, SortKey } from "../types";
 
 type PhoneToolbarProps = {
   query: string;
   brand: string;
   series: string;
   sortKey: SortKey;
-  performanceFloor: PerformanceFloor;
   brands: Array<[string, number]>;
   seriesOptions: Array<[string, number]>;
   specFilterOptions: PhoneSpecFilter[];
@@ -15,17 +15,18 @@ type PhoneToolbarProps = {
   pendingSpecValue: string;
   specFiltersLoading: boolean;
   syncing: boolean;
+  headerContent?: ReactNode;
   onQueryChange: (value: string) => void;
   onBrandChange: (value: string) => void;
   onSeriesChange: (value: string) => void;
   onSortChange: (value: SortKey) => void;
-  onPerformanceFloorChange: (value: PerformanceFloor) => void;
   onPendingSpecKeyChange: (value: string) => void;
   onPendingSpecValueChange: (value: string) => void;
   onAddSpecFilter: () => void;
   onRemoveSpecFilter: (key: string, value: string) => void;
   onRefresh: () => void;
   onSync: () => void;
+  onOpenSocmark: () => void;
   onClear: () => void;
 };
 
@@ -34,7 +35,6 @@ export function PhoneToolbar({
   brand,
   series,
   sortKey,
-  performanceFloor,
   brands,
   seriesOptions,
   specFilterOptions,
@@ -43,21 +43,20 @@ export function PhoneToolbar({
   pendingSpecValue,
   specFiltersLoading,
   syncing,
+  headerContent,
   onQueryChange,
   onBrandChange,
   onSeriesChange,
   onSortChange,
-  onPerformanceFloorChange,
   onPendingSpecKeyChange,
   onPendingSpecValueChange,
   onAddSpecFilter,
   onRemoveSpecFilter,
   onRefresh,
   onSync,
+  onOpenSocmark,
   onClear
 }: PhoneToolbarProps) {
-  const quickBrands = brands.slice(0, 10);
-  const quickSeries = seriesOptions.filter(([name]) => name !== "全部系列").slice(0, 8);
   const activeSpecOption = specFilterOptions.find((option) => option.key === pendingSpecKey);
   const selectedSpecIdentities = new Set(selectedSpecFilters.map((filter) => `${filter.key}=${filter.value}`));
   const availableSpecValues =
@@ -68,18 +67,21 @@ export function PhoneToolbar({
     brand !== "all" ||
     series !== "all" ||
     sortKey !== "release_desc" ||
-    performanceFloor ||
     selectedSpecFilters.length > 0;
 
   return (
     <aside className="filter-panel" aria-label="筛选工具">
-      <div className="filter-panel-header">
-        <div>
-          <span className="detail-kicker">Filters</span>
-          <h2>筛选与排序</h2>
+      {headerContent ? (
+        <div className="filter-dashboard-header">{headerContent}</div>
+      ) : (
+        <div className="filter-panel-header">
+          <div>
+            <span className="detail-kicker">Filters</span>
+            <h2>筛选与排序</h2>
+          </div>
+          <SlidersHorizontal size={18} />
         </div>
-        <SlidersHorizontal size={18} />
-      </div>
+      )}
 
       <div className="filter-stack">
         <label className="filter-field">
@@ -137,49 +139,6 @@ export function PhoneToolbar({
             <ChevronDown className="select-chevron" size={18} />
           </label>
         </label>
-
-        <div className="quick-brand-group" aria-label="常用品牌">
-          {quickBrands.map(([name, count]) => (
-            <button
-              className={brand === name ? "active" : ""}
-              key={name}
-              type="button"
-              onClick={() => onBrandChange(name)}
-              title={`${name} ${count} 款`}
-            >
-              <span>{name}</span>
-              <em>{count}</em>
-            </button>
-          ))}
-        </div>
-
-        <label className="filter-field">
-          <span>性能不低于</span>
-          <label className="select-field">
-            <select value={performanceFloor} onChange={(event) => onPerformanceFloorChange(event.target.value as PerformanceFloor)}>
-              <option value="">不限性能档</option>
-              <option value="snapdragon_8_gen3">骁龙 8 Gen3 级</option>
-              <option value="snapdragon_8_elite">骁龙 8 至尊版级</option>
-              <option value="snapdragon_8_elite_gen5">骁龙 8 至尊版 Gen5 级</option>
-            </select>
-            <ChevronDown className="select-chevron" size={18} />
-          </label>
-        </label>
-
-        <div className="quick-brand-group quick-series-group" aria-label="常用系列">
-          {quickSeries.map(([name, count]) => (
-            <button
-              className={series === name ? "active" : ""}
-              key={name}
-              type="button"
-              onClick={() => onSeriesChange(name)}
-              title={`${name} ${count} 款`}
-            >
-              <span>{name}</span>
-              <em>{count}</em>
-            </button>
-          ))}
-        </div>
 
         <details className="advanced-filter-block" aria-label="详情参数筛选">
           <summary className="advanced-filter-title">
@@ -244,6 +203,10 @@ export function PhoneToolbar({
       </div>
 
       <div className="filter-actions">
+        <button className="icon-button" onClick={onOpenSocmark} type="button">
+          <Braces size={18} />
+          接口
+        </button>
         <button className="icon-button" onClick={onRefresh} type="button">
           <RefreshCw size={18} />
           刷新

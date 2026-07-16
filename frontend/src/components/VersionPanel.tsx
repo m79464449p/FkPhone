@@ -1,8 +1,9 @@
 import { Check, ExternalLink, Plus, X } from "lucide-react";
+import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import type { Phone, PhoneVersion } from "../types";
 import { normalizePhoneBrand } from "../utils/brand";
 import { formatPrice } from "../utils/format";
-import { pickFeaturedSpecs } from "../utils/phone";
 
 type VersionPanelProps = {
   phone: Phone;
@@ -25,7 +26,22 @@ export function VersionPanel({
 }: VersionPanelProps) {
   const normalizedBrand = normalizePhoneBrand(phone);
 
-  return (
+  useEffect(() => {
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousBodyOverscrollBehavior = document.body.style.overscrollBehavior;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.body.style.overscrollBehavior = "none";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.body.style.overscrollBehavior = previousBodyOverscrollBehavior;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, []);
+
+  return createPortal(
     <div className="detail-overlay" role="dialog" aria-modal="true" aria-label={`${phone.name} 版本参数`}>
       <aside className="detail-panel">
         <header className="detail-header">
@@ -38,20 +54,23 @@ export function VersionPanel({
           </button>
         </header>
 
-        {loading && <div className="state-box">正在加载版本参数</div>}
-        {error && <div className="state-box error-box">版本参数加载失败：{error}</div>}
-        {!loading && !error && versions.length === 0 && <div className="state-box">暂无版本参数</div>}
+        <div className="detail-panel-body">
+          {loading && <div className="state-box">正在加载版本参数</div>}
+          {error && <div className="state-box error-box">版本参数加载失败：{error}</div>}
+          {!loading && !error && versions.length === 0 && <div className="state-box">暂无版本参数</div>}
 
-        {!loading && !error && versions.length > 0 && (
-          <VersionSummary
-            phone={phone}
-            versions={versions}
-            selectedConfigIds={selectedConfigIds}
-            onToggleCompare={onToggleCompare}
-          />
-        )}
+          {!loading && !error && versions.length > 0 && (
+            <VersionSummary
+              phone={phone}
+              versions={versions}
+              selectedConfigIds={selectedConfigIds}
+              onToggleCompare={onToggleCompare}
+            />
+          )}
+        </div>
       </aside>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -64,7 +83,6 @@ type VersionSummaryProps = {
 
 function VersionSummary({ phone, versions, selectedConfigIds, onToggleCompare }: VersionSummaryProps) {
   const representative = versions[0];
-  const featuredSpecs = pickFeaturedSpecs(representative.specs);
 
   return (
     <div className="version-summary">
@@ -98,8 +116,8 @@ function VersionSummary({ phone, versions, selectedConfigIds, onToggleCompare }:
           <span>{representative.specs.length} 项参数</span>
         </div>
         <dl className="spec-list">
-          {featuredSpecs.map((spec) => (
-            <div className="spec-row" key={`${representative.config_id}-${spec.group}-${spec.subgroup}-${spec.name}`}>
+          {representative.specs.map((spec, index) => (
+            <div className="spec-row" key={`${representative.config_id}-${index}-${spec.group}-${spec.subgroup}-${spec.name}`}>
               <dt>{spec.name}</dt>
               <dd>{spec.value}</dd>
             </div>
