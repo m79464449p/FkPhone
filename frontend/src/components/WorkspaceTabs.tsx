@@ -1,4 +1,4 @@
-import { ShoppingBag, SlidersHorizontal } from "lucide-react";
+import { ChartNoAxesColumnIncreasing, ShoppingBag, SlidersHorizontal } from "lucide-react";
 import type { WorkspaceTab } from "../types";
 
 type WorkspaceTabsProps = {
@@ -20,6 +20,16 @@ export function WorkspaceTabs({ activeTab, phoneCount, goofishCount, onChange }:
         <SlidersHorizontal size={17} />
         参数
         <span>{phoneCount.toLocaleString("zh-CN")}</span>
+      </button>
+      <button
+        className={activeTab === "ranking" ? "active" : ""}
+        type="button"
+        onClick={() => onChange("ranking")}
+        aria-current={activeTab === "ranking" ? "page" : undefined}
+      >
+        <ChartNoAxesColumnIncreasing size={17} />
+        排行
+        <span>4</span>
       </button>
       <button
         className={activeTab === "goofish" ? "active" : ""}

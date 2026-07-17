@@ -42,6 +42,8 @@ CREATE TABLE IF NOT EXISTS goofish_listings (
     want_count INTEGER,
     browse_count INTEGER,
     seller_credit TEXT,
+    image_url TEXT,
+    image_urls JSONB NOT NULL DEFAULT '[]'::jsonb,
     source_url TEXT NOT NULL,
     raw_text TEXT NOT NULL,
     first_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -50,6 +52,13 @@ CREATE TABLE IF NOT EXISTS goofish_listings (
 );
 
 ALTER TABLE goofish_listings ADD COLUMN IF NOT EXISTS browse_count INTEGER;
+ALTER TABLE goofish_listings ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE goofish_listings ADD COLUMN IF NOT EXISTS image_urls JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+UPDATE goofish_listings
+SET image_urls = jsonb_build_array(image_url)
+WHERE image_url IS NOT NULL
+  AND image_urls = '[]'::jsonb;
 
 CREATE TABLE IF NOT EXISTS goofish_listing_matches (
     item_id TEXT NOT NULL REFERENCES goofish_listings(item_id) ON DELETE CASCADE,

@@ -61,6 +61,13 @@ CREATE TABLE IF NOT EXISTS goofish_listings (
 );
 
 ALTER TABLE goofish_listings ADD COLUMN IF NOT EXISTS browse_count INTEGER;
+ALTER TABLE goofish_listings ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE goofish_listings ADD COLUMN IF NOT EXISTS image_urls JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+UPDATE goofish_listings
+SET image_urls = jsonb_build_array(image_url)
+WHERE image_url IS NOT NULL
+  AND image_urls = '[]'::jsonb;
 
 CREATE TABLE IF NOT EXISTS goofish_listing_matches (
     item_id TEXT NOT NULL REFERENCES goofish_listings(item_id) ON DELETE CASCADE,

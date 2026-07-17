@@ -25,6 +25,8 @@ class GoofishListing(BaseModel):
     want_count: int | None = None
     browse_count: int | None = None
     seller_credit: str | None = None
+    image_url: str | None = None
+    image_urls: list[str] = Field(default_factory=list)
     source_url: str
     raw_text: str
     keywords: list[str] = Field(default_factory=list)
@@ -78,6 +80,8 @@ def list_goofish_listings(
                 l.want_count,
                 l.browse_count,
                 l.seller_credit,
+                l.image_url,
+                l.image_urls,
                 l.source_url,
                 l.raw_text,
                 l.last_seen_at::text AS last_seen_at,
@@ -136,6 +140,54 @@ def search_goofish(payload: GoofishSearchRequest) -> GoofishSearchResponse:
     except subprocess.TimeoutExpired as exc:
         terminate_goofish_process()
         raise HTTPException(status_code=504, detail="goofish search timed out") from exc
+    finally:
+        with goofish_process_lock:
+            if goofish_process is active_process and active_process.poll() is not None:
+                goofish_process = None
+
+    output = f"{stdout}\n{stderr}"
+    response_payload = parse_json_tail(output)
+    if active_process.returncode != 0:
+        detail = response_payload or {"message": output[-2000:]}
+        raise HTTPException(status_code=500, detail=detail)
+
+    if not response_payload:
+        raise HTTPException(status_code=500, detail=output[-2000:])
+
+    return GoofishSearchResponse(**response_payload)
+
+
+@router.post("/login", response_model=GoofishSearchResponse)
+def login_goofish(payload: GoofishSearchRequest) -> GoofishSearchResponse:
+    global goofish_process
+
+    command = [
+        sys.executable,
+        "-m",
+        "app.services.goofish_browser_search",
+        "--login-only",
+        "--login-timeout",
+        str(payload.login_timeout_seconds or settings.goofish_login_timeout_seconds),
+    ]
+
+    timeout = payload.login_timeout_seconds or settings.goofish_login_timeout_seconds
+    with goofish_process_lock:
+        if goofish_process and goofish_process.poll() is None:
+            raise HTTPException(status_code=409, detail="goofish search is already running")
+        goofish_process = subprocess.Popen(
+            command,
+            cwd=Path(__file__).resolve().parents[2],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        active_process = goofish_process
+
+    try:
+        stdout, stderr = active_process.communicate(timeout=timeout + 30)
+    except subprocess.TimeoutExpired as exc:
+        terminate_goofish_process()
+        raise HTTPException(status_code=504, detail="goofish login timed out") from exc
     finally:
         with goofish_process_lock:
             if goofish_process is active_process and active_process.poll() is not None:

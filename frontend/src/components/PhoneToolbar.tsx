@@ -72,7 +72,7 @@ export function PhoneToolbar({
   return (
     <aside className="filter-panel" aria-label="筛选工具">
       {headerContent ? (
-        <div className="filter-dashboard-header">{headerContent}</div>
+        <div className="filter-dashboard-header workspace-dashboard-header">{headerContent}</div>
       ) : (
         <div className="filter-panel-header">
           <div>

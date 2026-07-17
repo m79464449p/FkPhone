@@ -3,6 +3,6 @@
   "private": true,
   "scripts": {
     "dev:frontend": "npm --prefix frontend run dev",
-    "dev:backend": "cd backend && uvicorn app.main:app --reload"
+    "dev:backend": "cd backend && uvicorn app.main:app --reload --host 127.0.0.1 --port 8001"
   }
 }

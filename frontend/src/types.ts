@@ -14,7 +14,7 @@ export type Phone = {
 };
 
 export type SortKey = "release_desc" | "score" | "price_asc" | "price_desc" | "name";
-export type WorkspaceTab = "parameters" | "goofish";
+export type WorkspaceTab = "parameters" | "ranking" | "goofish";
 export type PerformanceFloor = "" | "snapdragon_8_gen3" | "snapdragon_8_elite" | "snapdragon_8_elite_gen5";
 
 export type VersionSpec = {
@@ -90,6 +90,8 @@ export type GoofishListing = {
   want_count: number | null;
   browse_count: number | null;
   seller_credit: string | null;
+  image_url: string | null;
+  image_urls: string[];
   source_url: string;
   raw_text: string;
   keywords: string[];

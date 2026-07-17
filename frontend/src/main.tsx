@@ -8,6 +8,7 @@ import { GoofishPanel } from "./components/GoofishPanel";
 import { MetricCard } from "./components/MetricCard";
 import { PhoneResults } from "./components/PhoneResults";
 import { PhoneToolbar } from "./components/PhoneToolbar";
+import { RankingPanel } from "./components/RankingPanel";
 import { SocmarkApiPage } from "./components/SocmarkApiPage";
 import { VersionPanel } from "./components/VersionPanel";
 import { WorkspaceTabs } from "./components/WorkspaceTabs";
@@ -90,8 +91,9 @@ function App({ onOpenSocmark }: AppProps) {
   const [compareError, setCompareError] = useState("");
   const [compareOpen, setCompareOpen] = useState(false);
   const [goofishKeywordInput, setGoofishKeywordInput] = useState("");
-  const [goofishStorageFilter, setGoofishStorageFilter] = useState("256GB");
-  const [goofishRamFilter, setGoofishRamFilter] = useState("12GB");
+  const [goofishNameFilter, setGoofishNameFilter] = useState("");
+  const [goofishStorageFilter, setGoofishStorageFilter] = useState("");
+  const [goofishRamFilter, setGoofishRamFilter] = useState("");
   const [goofishListings, setGoofishListings] = useState<GoofishListing[]>([]);
   const [goofishLoading, setGoofishLoading] = useState(false);
   const [goofishSearching, setGoofishSearching] = useState(false);
@@ -292,8 +294,7 @@ function App({ onOpenSocmark }: AppProps) {
         })
       });
       if (!response.ok) {
-        const detail = await response.text();
-        throw new Error(detail || `HTTP ${response.status}`);
+        throw new Error(await readErrorMessage(response));
       }
       const result = (await response.json()) as GoofishSearchResponse;
       setGoofishMessage(
@@ -312,6 +313,35 @@ function App({ onOpenSocmark }: AppProps) {
       if (goofishSearchAbortRef.current === abortController) {
         goofishSearchAbortRef.current = null;
       }
+      setGoofishSearching(false);
+      setGoofishSearchStartedAt(null);
+    }
+  }
+
+  async function loginGoofish() {
+    setGoofishSearching(true);
+    setGoofishSearchStartedAt(Date.now());
+    setGoofishMessage("正在打开闲鱼登录窗口...");
+    setGoofishError("");
+    try {
+      const response = await fetch(`${API_BASE}/api/goofish/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          keywords: ["login"],
+          login_timeout_seconds: 600
+        })
+      });
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
+      }
+      const result = (await response.json()) as GoofishSearchResponse;
+      setGoofishMessage(result.message || "闲鱼登录已完成");
+    } catch (err) {
+      setGoofishError(err instanceof Error ? err.message : "登录失败");
+    } finally {
       setGoofishSearching(false);
       setGoofishSearchStartedAt(null);
     }
@@ -339,8 +369,7 @@ function App({ onOpenSocmark }: AppProps) {
     try {
       const response = await fetch(`${API_BASE}/api/goofish/session`, { method: "DELETE" });
       if (!response.ok) {
-        const detail = await response.text();
-        throw new Error(detail || `HTTP ${response.status}`);
+        throw new Error(await readErrorMessage(response));
       }
       const result = (await response.json()) as {
         cookie_file_removed: boolean;
@@ -486,10 +515,15 @@ function App({ onOpenSocmark }: AppProps) {
   }, [phones, query, brand, series, sortKey]);
 
   const visiblePhones = filteredPhones.slice(0, visibleCount);
-  const filteredGoofishListings = useMemo(
-    () => goofishListings.filter((listing) => matchesGoofishSpecFilters(listing, goofishStorageFilter, goofishRamFilter)),
-    [goofishListings, goofishStorageFilter, goofishRamFilter]
-  );
+  const filteredGoofishListings = useMemo(() => {
+    const normalizedNameFilter = goofishNameFilter.trim().toLowerCase();
+    return goofishListings.filter((listing) => {
+      const matchesName =
+        !normalizedNameFilter ||
+        `${listing.title} ${listing.raw_text} ${listing.keywords.join(" ")}`.toLowerCase().includes(normalizedNameFilter);
+      return matchesName && matchesGoofishSpecFilters(listing, goofishStorageFilter, goofishRamFilter);
+    });
+  }, [goofishListings, goofishNameFilter, goofishStorageFilter, goofishRamFilter]);
   const pricedPhones = filteredPhones.filter((phone) => phone.price != null);
   const averagePrice = pricedPhones.reduce((sum, phone) => sum + (phone.price ?? 0), 0) / Math.max(pricedPhones.length, 1);
   const averageScore = filteredPhones.reduce((sum, phone) => sum + phone.score, 0) / Math.max(filteredPhones.length, 1);
@@ -509,7 +543,7 @@ function App({ onOpenSocmark }: AppProps) {
           },
           {
             label: "筛选规格",
-            value: [goofishStorageFilter, goofishRamFilter].filter(Boolean).join(" / ") || "全部",
+            value: [goofishNameFilter.trim(), goofishStorageFilter, goofishRamFilter].filter(Boolean).join(" / ") || "全部",
             detail: "当前筛选条件",
             icon: SearchCheck,
             tone: "blue" as const
@@ -529,6 +563,37 @@ function App({ onOpenSocmark }: AppProps) {
             tone: "slate" as const
           }
         ]
+      : activeTab === "ranking"
+        ? [
+            {
+              label: "榜单来源",
+              value: "SOCPK",
+              detail: "极客湾移动芯片排行",
+              icon: ChartNoAxesColumnIncreasing,
+              tone: "teal" as const
+            },
+            {
+              label: "榜单数量",
+              value: "4",
+              detail: "综合 / CPU / GPU / 能效",
+              icon: BadgeCheck,
+              tone: "blue" as const
+            },
+            {
+              label: "展示方式",
+              value: "内嵌",
+              detail: "iframe 直接查看原榜单",
+              icon: Smartphone,
+              tone: "red" as const
+            },
+            {
+              label: "当前页签",
+              value: "排行",
+              detail: "参数后，闲鱼前",
+              icon: SearchCheck,
+              tone: "slate" as const
+            }
+          ]
       : [
           {
             label: brand === "all" && series === "all" ? "手机数量" : "当前结果",
@@ -590,11 +655,11 @@ function App({ onOpenSocmark }: AppProps) {
 
   return (
     <main className="app-shell">
-      {activeTab === "goofish" && workspaceOverview}
-
       {activeTab === "goofish" && (
         <GoofishPanel
+          headerContent={workspaceOverview}
           keywordInput={goofishKeywordInput}
+          nameFilter={goofishNameFilter}
           storageFilter={goofishStorageFilter}
           ramFilter={goofishRamFilter}
           listings={filteredGoofishListings}
@@ -604,8 +669,10 @@ function App({ onOpenSocmark }: AppProps) {
           message={goofishMessage}
           error={goofishError}
           onKeywordInputChange={setGoofishKeywordInput}
+          onNameFilterChange={setGoofishNameFilter}
           onStorageFilterChange={setGoofishStorageFilter}
           onRamFilterChange={setGoofishRamFilter}
+          onLogin={() => void loginGoofish()}
           onSearch={() => void searchGoofish()}
           onCancelSearch={() => void cancelGoofishSearch()}
           onRefresh={() => void loadGoofishListings()}
@@ -669,6 +736,8 @@ function App({ onOpenSocmark }: AppProps) {
           </section>
         </section>
       )}
+
+      {activeTab === "ranking" && <RankingPanel headerContent={workspaceOverview} />}
 
       {selectedPhone && (
         <VersionPanel

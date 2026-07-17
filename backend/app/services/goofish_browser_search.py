@@ -31,6 +31,8 @@ class Listing:
     want_count: int | None
     browse_count: int | None
     seller_credit: str | None
+    image_url: str | None
+    image_urls: list[str]
     source_url: str
     raw_text: str
     keyword: str
@@ -40,7 +42,7 @@ class Listing:
 def main() -> int:
     args = parse_args()
     keywords = normalize_keywords(args.keyword)
-    if not keywords:
+    if not keywords and not args.login_only:
         print(json.dumps({"status": "error", "message": "keywords are required"}), flush=True)
         return 2
 
@@ -49,7 +51,7 @@ def main() -> int:
     profile_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        stats = run_search(profile_dir, keywords, args.max_results, args.login_timeout)
+        stats = run_visible_login(profile_dir, args.login_timeout) if args.login_only else run_search(profile_dir, keywords, args.max_results, args.login_timeout)
     except PlaywrightError as exc:
         print(
             json.dumps(
@@ -110,6 +112,31 @@ def run_search(profile_dir: Path, keywords: list[str], max_results: int, login_t
             "matched": 0,
             "login_required": True,
             "message": "已检测到登录跳转，但保存的闲鱼登录态无法用于搜索。请重新扫码，或导入包含 _m_h5_tk 和 unb 的 Cookie。",
+        }
+
+
+def run_visible_login(profile_dir: Path, login_timeout: int) -> dict[str, int | bool | str | None]:
+    if settings.goofish_headless:
+        return {
+            "inserted": 0,
+            "updated": 0,
+            "matched": 0,
+            "login_required": True,
+            "message": "当前禁用了可视化登录窗口。请将 GOOFISH_HEADLESS=false 后重试。",
+        }
+
+    with sync_playwright() as p:
+        login_required = perform_visible_login(p, profile_dir, login_timeout)
+        return {
+            "inserted": 0,
+            "updated": 0,
+            "matched": 0,
+            "login_required": login_required,
+            "message": (
+                f"已打开闲鱼扫码登录窗口，但 {login_timeout} 秒内没有检测到登录完成。"
+                if login_required
+                else "闲鱼登录已完成。"
+            ),
         }
 
 
@@ -454,6 +481,8 @@ def enrich_listing_counts(cookie_jar: dict[str, str], listing: Listing) -> None:
         listing.want_count = detail_want_count
     if detail_browse_count is not None:
         listing.browse_count = detail_browse_count
+    listing.image_urls = merge_image_urls(listing.image_urls, extract_detail_image_urls(response))
+    listing.image_url = listing.image_urls[0] if listing.image_urls else listing.image_url
     listing.raw_text = clean_text(" ".join(
         part for part in [
             listing.raw_text,
@@ -481,6 +510,8 @@ def parse_mtop_listing(row: dict, keyword: str, position: int) -> Listing | None
     want_count = parse_count_from_text(tag_text, r"(\d+)\s*人想要") or parse_int(ex_content.get("want") or args.get("wantNum"))
     browse_count = parse_count_from_text(tag_text, r"(\d+)\s*浏览")
     seller_credit = extract_mtop_credit(ex_content)
+    image_urls = extract_mtop_image_urls(row)
+    image_url = image_urls[0] if image_urls else None
     category_id = str(args.get("cCatId") or args.get("catId") or "")
     raw_text = clean_text(" ".join(
         part for part in [
@@ -502,11 +533,155 @@ def parse_mtop_listing(row: dict, keyword: str, position: int) -> Listing | None
         want_count=want_count,
         browse_count=browse_count,
         seller_credit=seller_credit,
+        image_url=image_url,
+        image_urls=image_urls,
         source_url=build_item_url(item_id, category_id),
         raw_text=raw_text or title or item_id,
         keyword=keyword,
         position=position,
     )
+
+
+def extract_mtop_image_urls(row: dict) -> list[str]:
+    main = (((row.get("data") or {}).get("item") or {}).get("main")) or {}
+    ex_content = main.get("exContent") or {}
+    detail_params = ex_content.get("detailParams") or {}
+    urls: list[str] = []
+
+    for container in [ex_content, detail_params, main]:
+        for key in ["picUrl", "picURL", "itemPicUrl", "itemPic", "coverUrl", "cover", "imageUrl", "picUrls", "images"]:
+            value = container.get(key)
+            if isinstance(value, list):
+                urls.extend(extract_image_urls_from_value(value))
+                continue
+            image_url = normalize_image_url(str(container.get(key) or ""))
+            if image_url:
+                urls.append(image_url)
+
+    candidates: list[tuple[int, str]] = []
+
+    def visit(value, path: list[str]) -> None:
+        if isinstance(value, dict):
+            for key, nested in value.items():
+                normalized_key = str(key).lower()
+                if any(token in normalized_key for token in ["pic", "image", "img", "cover", "url"]):
+                    visit(nested, [*path, str(key)])
+                elif isinstance(nested, (dict, list)):
+                    visit(nested, [*path, str(key)])
+        elif isinstance(value, list):
+            for index, nested in enumerate(value):
+                visit(nested, [*path, str(index)])
+        elif isinstance(value, str):
+            normalized = normalize_image_url(value)
+            if normalized and not is_non_product_image_path(path, normalized):
+                candidates.append((score_product_image_path(path, normalized), normalized))
+
+    visit(row, [])
+    candidates.sort(key=lambda candidate: candidate[0], reverse=True)
+    urls.extend(candidate[1] for candidate in candidates)
+    return unique_image_urls(urls)
+
+
+def extract_mtop_image_url(row: dict) -> str | None:
+    urls = extract_mtop_image_urls(row)
+    return urls[0] if urls else None
+
+
+def extract_detail_image_urls(response: dict) -> list[str]:
+    data = response.get("data") or {}
+    item_do = data.get("itemDO") or {}
+    candidates: list[str] = []
+    for key in ["imageInfos", "images", "imageList", "picUrls", "pics", "mainImages"]:
+        candidates.extend(extract_image_urls_from_value(item_do.get(key)))
+        candidates.extend(extract_image_urls_from_value(data.get(key)))
+    return unique_image_urls(candidates)
+
+
+def extract_image_urls_from_value(value) -> list[str]:
+    urls: list[str] = []
+    if isinstance(value, dict):
+        for nested in value.values():
+            urls.extend(extract_image_urls_from_value(nested))
+    elif isinstance(value, list):
+        for nested in value:
+            urls.extend(extract_image_urls_from_value(nested))
+    elif isinstance(value, str):
+        image_url = normalize_image_url(value)
+        if image_url:
+            urls.append(image_url)
+    return urls
+
+
+def merge_image_urls(*groups: list[str]) -> list[str]:
+    urls: list[str] = []
+    for group in groups:
+        urls.extend(group)
+    return unique_image_urls(urls)
+
+
+def unique_image_urls(urls: list[str]) -> list[str]:
+    unique: list[str] = []
+    seen: set[str] = set()
+    for url in urls:
+        if url in seen:
+            continue
+        seen.add(url)
+        unique.append(url)
+    return unique
+
+
+def is_non_product_image_path(path: list[str], image_url: str) -> bool:
+    path_text = ".".join(path).lower()
+    if any(token in path_text for token in ["tag", "avatar", "active", "identity", "label", "rich", "status", "credit"]):
+        return True
+    if re.search(r"(?:^|[-_])tps-\d{1,3}-\d{1,3}\.", image_url, re.I):
+        return True
+    return False
+
+
+def score_product_image_path(path: list[str], image_url: str) -> int:
+    path_text = ".".join(path).lower()
+    score = 0
+    if any(token in path_text for token in ["picurl", "itempic", "cover", "image"]):
+        score += 20
+    if "excontent" in path_text:
+        score += 8
+    if re.search(r"(xy_item|uploaded/i\d+/)", image_url, re.I):
+        score += 12
+    if re.search(r"(?:^|[-_])tps-\d+-\d+\.", image_url, re.I):
+        score -= 50
+    return score
+
+
+def normalize_image_url(value: str) -> str | None:
+    text = value.strip()
+    if not text:
+        return None
+    if text.startswith("//"):
+        text = f"https:{text}"
+    if text.startswith("http://"):
+        text = f"https://{text.removeprefix('http://')}"
+    if not re.match(r"https?://", text):
+        return None
+
+    parsed = urlparse(text)
+    extra = parse_qs(parsed.query).get("extra", [""])[0]
+    if "photo-search" in parsed.path and extra:
+        try:
+            image_info = (json.loads(extra).get("imageInfo") or {})
+        except json.JSONDecodeError:
+            image_info = {}
+        nested_url = normalize_image_url(str(image_info.get("url") or ""))
+        if nested_url:
+            return nested_url
+
+    if not re.search(r"(alicdn|taobao|tbcdn|xianyu|imgextra|uploaded)", text, re.I):
+        return None
+    if re.search(r"\.heic$", parsed.path, re.I):
+        return f"{text}_640x640q90.jpg"
+    if re.search(r"\.(?:jpg|jpeg|png|webp|avif|heic)(?:[?#_].*)?$", parsed.path, re.I):
+        return text
+    return None
 
 
 def extract_mtop_credit(ex_content: dict) -> str | None:
@@ -634,7 +809,19 @@ def extract_listings(page, keyword: str) -> list[Listing]:
         () => Array.from(document.querySelectorAll('a'))
           .map((a) => ({
             href: a.href || '',
-            text: (a.innerText || a.textContent || '').replace(/\\s+/g, ' ').trim()
+            text: (a.innerText || a.textContent || '').replace(/\\s+/g, ' ').trim(),
+            imageUrl: (() => {
+              const scope = a.closest('[class]') || a;
+              const images = Array.from(scope.querySelectorAll('img'))
+                .map((img) => ({
+                  src: img.currentSrc || img.src || img.getAttribute('data-src') || '',
+                  area: (img.naturalWidth || img.width || 0) * (img.naturalHeight || img.height || 0)
+                }))
+                .filter((image) => image.src && image.area >= 6400)
+                .sort((a, b) => b.area - a.area);
+              const img = images[0];
+              return img?.src || '';
+            })()
           }))
           .filter((x) => /\\/item\\?id=/.test(x.href) && x.text)
         """
@@ -647,6 +834,8 @@ def extract_listings(page, keyword: str) -> list[Listing]:
             continue
         seen.add(item_id)
         raw_text = row["text"]
+        image_url = normalize_image_url(row.get("imageUrl") or "")
+        image_urls = [image_url] if image_url else []
         listings.append(
             Listing(
                 item_id=item_id,
@@ -656,6 +845,8 @@ def extract_listings(page, keyword: str) -> list[Listing]:
                 want_count=parse_want_count(raw_text),
                 browse_count=parse_browse_count(raw_text),
                 seller_credit=parse_seller_credit(raw_text),
+                image_url=image_url,
+                image_urls=image_urls,
                 source_url=normalize_item_url(row["href"]),
                 raw_text=raw_text,
                 keyword=keyword,
@@ -673,7 +864,7 @@ def save_listings(listings: list[Listing]) -> tuple[int, int, int]:
         for listing in listings:
             existing = conn.execute(
                 """
-                SELECT title, price, location, want_count, browse_count, seller_credit, source_url, raw_text
+                SELECT title, price, location, want_count, browse_count, seller_credit, image_url, image_urls, source_url, raw_text
                 FROM goofish_listings
                 WHERE item_id = %s
                 """,
@@ -686,15 +877,21 @@ def save_listings(listings: list[Listing]) -> tuple[int, int, int]:
                 "want_count": listing.want_count,
                 "browse_count": listing.browse_count,
                 "seller_credit": listing.seller_credit,
+                "image_url": listing.image_url,
+                "image_urls": listing.image_urls,
                 "source_url": listing.source_url,
                 "raw_text": listing.raw_text,
             }
+            existing_image_urls = existing["image_urls"] if existing and isinstance(existing["image_urls"], list) else []
             effective_incoming = incoming
             if existing:
+                incoming_image_urls = listing.image_urls or existing_image_urls
                 effective_incoming = {
                     **incoming,
                     "browse_count": incoming["browse_count"] if incoming["browse_count"] is not None else existing["browse_count"],
                     "seller_credit": incoming["seller_credit"] or existing["seller_credit"],
+                    "image_url": incoming["image_url"] or existing["image_url"],
+                    "image_urls": incoming_image_urls,
                     "raw_text": (
                         existing["raw_text"]
                         if incoming["browse_count"] is None and existing["browse_count"] is not None
@@ -705,12 +902,12 @@ def save_listings(listings: list[Listing]) -> tuple[int, int, int]:
             conn.execute(
                 """
                 INSERT INTO goofish_listings (
-                    item_id, title, price, location, want_count, browse_count, seller_credit, source_url, raw_text,
+                    item_id, title, price, location, want_count, browse_count, seller_credit, image_url, image_urls, source_url, raw_text,
                     first_seen_at, last_seen_at, updated_at
                 )
                 VALUES (
                     %(item_id)s, %(title)s, %(price)s, %(location)s, %(want_count)s, %(browse_count)s, %(seller_credit)s,
-                    %(source_url)s, %(raw_text)s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    %(image_url)s, %(image_urls_json)s::jsonb, %(source_url)s, %(raw_text)s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 )
                 ON CONFLICT (item_id) DO UPDATE SET
                     title = EXCLUDED.title,
@@ -719,6 +916,11 @@ def save_listings(listings: list[Listing]) -> tuple[int, int, int]:
                     want_count = EXCLUDED.want_count,
                     browse_count = COALESCE(EXCLUDED.browse_count, goofish_listings.browse_count),
                     seller_credit = COALESCE(EXCLUDED.seller_credit, goofish_listings.seller_credit),
+                    image_url = COALESCE(EXCLUDED.image_url, goofish_listings.image_url),
+                    image_urls = CASE
+                        WHEN jsonb_array_length(EXCLUDED.image_urls) > 0 THEN EXCLUDED.image_urls
+                        ELSE goofish_listings.image_urls
+                    END,
                     source_url = EXCLUDED.source_url,
                     raw_text = CASE
                         WHEN EXCLUDED.browse_count IS NULL AND goofish_listings.browse_count IS NOT NULL
@@ -733,6 +935,11 @@ def save_listings(listings: list[Listing]) -> tuple[int, int, int]:
                             OR goofish_listings.want_count IS DISTINCT FROM EXCLUDED.want_count
                             OR goofish_listings.browse_count IS DISTINCT FROM COALESCE(EXCLUDED.browse_count, goofish_listings.browse_count)
                             OR goofish_listings.seller_credit IS DISTINCT FROM COALESCE(EXCLUDED.seller_credit, goofish_listings.seller_credit)
+                            OR goofish_listings.image_url IS DISTINCT FROM COALESCE(EXCLUDED.image_url, goofish_listings.image_url)
+                            OR goofish_listings.image_urls IS DISTINCT FROM CASE
+                                WHEN jsonb_array_length(EXCLUDED.image_urls) > 0 THEN EXCLUDED.image_urls
+                                ELSE goofish_listings.image_urls
+                            END
                             OR goofish_listings.source_url IS DISTINCT FROM EXCLUDED.source_url
                             OR goofish_listings.raw_text IS DISTINCT FROM CASE
                                 WHEN EXCLUDED.browse_count IS NULL AND goofish_listings.browse_count IS NOT NULL
@@ -743,7 +950,7 @@ def save_listings(listings: list[Listing]) -> tuple[int, int, int]:
                         ELSE goofish_listings.updated_at
                     END
                 """,
-                {**incoming, "item_id": listing.item_id},
+                {**incoming, "image_urls_json": json.dumps(listing.image_urls, ensure_ascii=False), "item_id": listing.item_id},
             )
             conn.execute(
                 """
@@ -769,6 +976,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--keyword", action="append", default=[])
     parser.add_argument("--max-results", type=int, default=30)
     parser.add_argument("--login-timeout", type=int, default=settings.goofish_login_timeout_seconds)
+    parser.add_argument("--login-only", action="store_true")
     return parser.parse_args()
 
 
