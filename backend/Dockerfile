@@ -7,13 +7,16 @@ RUN sed -i \
     -e 's|http://deb.debian.org/debian-security|https://mirrors.aliyun.com/debian-security|g' \
     /etc/apt/sources.list.d/debian.sources
 
-COPY requirements.txt .
+COPY backend/requirements.txt ./backend-requirements.txt
+COPY crawler/requirements.txt ./crawler-requirements.txt
 RUN pip install --no-cache-dir \
     -i https://mirrors.aliyun.com/pypi/simple/ \
     --trusted-host mirrors.aliyun.com \
-    -r requirements.txt
+    -r backend-requirements.txt \
+    -r crawler-requirements.txt
 RUN python -m playwright install --with-deps chromium
 
-COPY app ./app
+COPY backend/app ./app
+COPY crawler ./crawler
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

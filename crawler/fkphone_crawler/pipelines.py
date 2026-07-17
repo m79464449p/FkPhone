@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 
 import psycopg
 from psycopg.rows import dict_row
@@ -11,9 +12,9 @@ from fkphone_crawler.items import PhoneItem, PhoneVersionItem
 class PostgresPhonePipeline:
     def open_spider(self, spider):
         env = dotenv_values(Path(__file__).resolve().parents[2] / ".env")
-        database_url = env.get("DATABASE_URL")
+        database_url = os.getenv("DATABASE_URL") or env.get("DATABASE_URL")
         if not database_url:
-            raise RuntimeError("DATABASE_URL is required in project .env")
+            raise RuntimeError("DATABASE_URL is required in environment or project .env")
 
         self.conn = psycopg.connect(database_url, row_factory=dict_row)
         self.conn.execute(

@@ -233,7 +233,7 @@ function App({ onOpenSocmark }: AppProps) {
           fetch_versions: true
         })
       });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) throw new Error(await readErrorMessage(response));
       const result = (await response.json()) as {
         inserted: number;
         updated: number;
@@ -251,6 +251,18 @@ function App({ onOpenSocmark }: AppProps) {
     } finally {
       setSyncing(false);
     }
+  }
+
+  async function readErrorMessage(response: Response) {
+    try {
+      const data = (await response.json()) as { detail?: unknown };
+      if (typeof data.detail === "string" && data.detail.trim()) {
+        return data.detail.trim();
+      }
+    } catch {
+      // Fall back to the status code when the backend does not return JSON.
+    }
+    return `HTTP ${response.status}`;
   }
 
   async function searchGoofish() {
