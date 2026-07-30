@@ -12,10 +12,11 @@ import {
   SimpleGrid,
   Stack,
   Table,
+  Textarea,
   Text,
   TextInput
 } from "@mantine/core";
-import { ChevronLeft, ChevronRight, ExternalLink, HardDrive, MemoryStick, RefreshCw, Search, ShoppingBag, Trash2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, HardDrive, KeyRound, MemoryStick, RefreshCw, Search, ShoppingBag, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 import type { CSSProperties } from "react";
@@ -42,6 +43,7 @@ type GoofishPanelProps = {
   onStorageFilterChange: (value: string) => void;
   onRamFilterChange: (value: string) => void;
   onLogin: () => void;
+  onImportCookie: (cookie: string) => Promise<void>;
   onSearch: () => void;
   onCancelSearch: () => void;
   onRefresh: () => void;
@@ -71,12 +73,15 @@ export function GoofishPanel({
   onStorageFilterChange,
   onRamFilterChange,
   onLogin,
+  onImportCookie,
   onSearch,
   onCancelSearch,
   onRefresh,
   onResetSession
 }: GoofishPanelProps) {
   const [preview, setPreview] = useState<PreviewState | null>(null);
+  const [cookieModalOpen, setCookieModalOpen] = useState(false);
+  const [cookieInput, setCookieInput] = useState("");
 
   useEffect(() => {
     if (!preview) return;
@@ -177,6 +182,9 @@ export function GoofishPanel({
             <Button size="sm" leftSection={<ShoppingBag size={18} />} onClick={onLogin} disabled={searching} variant="light">
               登录闲鱼
             </Button>
+            <Button size="sm" leftSection={<KeyRound size={18} />} onClick={() => setCookieModalOpen(true)} disabled={searching} variant="light">
+              导入 Cookie
+            </Button>
             <Button size="sm" leftSection={<RefreshCw size={18} />} onClick={onRefresh} disabled={loading} variant="light">
               {loading ? "刷新中" : "刷新列表"}
             </Button>
@@ -227,6 +235,34 @@ export function GoofishPanel({
           </Alert>
         )}
         {error && <Alert variant="light" color="red">闲鱼接口失败：{error}</Alert>}
+
+        <Modal opened={cookieModalOpen} onClose={() => setCookieModalOpen(false)} title="导入闲鱼 Cookie" centered>
+          <Stack gap="sm">
+            <Textarea
+              label="Cookie 内容"
+              description="粘贴浏览器中 goofish.com 的 Cookie JSON 或 Cookie 请求头文本。"
+              minRows={6}
+              autosize
+              value={cookieInput}
+              onChange={(event) => setCookieInput(event.currentTarget.value)}
+              placeholder="_m_h5_tk=...; unb=..."
+            />
+            <Group justify="flex-end">
+              <Button variant="subtle" onClick={() => setCookieModalOpen(false)}>取消</Button>
+              <Button
+                leftSection={<Upload size={16} />}
+                disabled={!cookieInput.trim()}
+                onClick={async () => {
+                  await onImportCookie(cookieInput);
+                  setCookieInput("");
+                  setCookieModalOpen(false);
+                }}
+              >
+                导入并验证
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
 
         <ScrollArea type="auto" className="goofish-table-wrap">
           <Table striped highlightOnHover withTableBorder withColumnBorders className="goofish-table">

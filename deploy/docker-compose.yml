@@ -23,6 +23,7 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/fkphone
       REDIS_URL: ""
+      CRAWLER_TIMEOUT_SECONDS: "300"
       CRAWLER_WORKDIR: /app/crawler
       GOOFISH_PROFILE_DIR: /app/.goofish-profile
       GOOFISH_COOKIE_FILE: /app/.goofish-secrets/cookies.json

@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.database import get_connection
+from app.services.goofish_browser_search import has_mtop_login_cookies, write_cookie_file
 
 router = APIRouter(prefix="/goofish", tags=["goofish"])
 goofish_process_lock = threading.Lock()
@@ -55,6 +56,29 @@ class GoofishSessionResetResponse(BaseModel):
     profile_removed: bool
     search_cancelled: bool
     message: str
+
+
+class GoofishCookieImportRequest(BaseModel):
+    cookie: str = Field(min_length=1, max_length=20000)
+
+
+class GoofishCookieImportResponse(BaseModel):
+    status: str
+    cookie_names: list[str]
+    message: str
+
+
+@router.post("/cookie", response_model=GoofishCookieImportResponse)
+def import_goofish_cookie(payload: GoofishCookieImportRequest) -> GoofishCookieImportResponse:
+    cookie_jar = parse_cookie_input(payload.cookie)
+    if not has_mtop_login_cookies(cookie_jar):
+        raise HTTPException(status_code=400, detail="Cookie 必须包含 _m_h5_tk 和 unb")
+    write_cookie_file(cookie_jar)
+    return GoofishCookieImportResponse(
+        status="ok",
+        cookie_names=sorted(cookie_jar),
+        message="闲鱼 Cookie 已导入，请重新搜索验证登录态。",
+    )
 
 
 @router.get("/listings", response_model=list[GoofishListing])
@@ -258,6 +282,30 @@ def remove_path(path: Path) -> bool:
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"failed to remove {path}: {exc}") from exc
     return False
+
+
+def parse_cookie_input(raw_cookie: str) -> dict[str, str]:
+    value = raw_cookie.strip()
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError:
+        payload = None
+
+    if isinstance(payload, dict):
+        return {str(name): str(cookie_value) for name, cookie_value in payload.items() if cookie_value is not None}
+    if isinstance(payload, list):
+        return {
+            str(cookie.get("name")): str(cookie.get("value"))
+            for cookie in payload
+            if isinstance(cookie, dict) and cookie.get("name") and cookie.get("value") is not None
+        }
+
+    cookie_jar: dict[str, str] = {}
+    for part in re.split(r"[;\n\r]+", value):
+        name, separator, cookie_value = part.partition("=")
+        if separator and name.strip() and cookie_value.strip():
+            cookie_jar[name.strip()] = cookie_value.strip().strip('"')
+    return cookie_jar
 
 
 def normalize_keywords(keywords: list[str]) -> list[str]:

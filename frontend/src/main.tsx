@@ -360,6 +360,23 @@ function App({ onOpenSocmark }: AppProps) {
     }
   }
 
+  async function importGoofishCookie(cookie: string) {
+    setGoofishMessage("正在导入闲鱼 Cookie...");
+    setGoofishError("");
+    try {
+      const response = await fetch(`${API_BASE}/api/goofish/cookie`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cookie })
+      });
+      if (!response.ok) throw new Error(await readErrorMessage(response));
+      const result = (await response.json()) as { message: string };
+      setGoofishMessage(result.message);
+    } catch (err) {
+      setGoofishError(err instanceof Error ? err.message : "Cookie 导入失败");
+    }
+  }
+
   async function cancelGoofishSearch() {
     goofishSearchAbortRef.current?.abort();
     setGoofishSearching(false);
@@ -686,6 +703,7 @@ function App({ onOpenSocmark }: AppProps) {
           onStorageFilterChange={setGoofishStorageFilter}
           onRamFilterChange={setGoofishRamFilter}
           onLogin={() => void loginGoofish()}
+          onImportCookie={importGoofishCookie}
           onSearch={() => void searchGoofish()}
           onCancelSearch={() => void cancelGoofishSearch()}
           onRefresh={() => void loadGoofishListings()}
