@@ -36,6 +36,7 @@ venv/
 data/
 tmp/
 downloads/
+*.db
 .goofish-profile/
 .goofish-profile-dev/
 .goofish-cookies.json
