@@ -1,3 +1,4 @@
+import { Badge, Tabs, Text } from "@mantine/core";
 import { ChartNoAxesColumnIncreasing, ShoppingBag, SlidersHorizontal } from "lucide-react";
 import type { WorkspaceTab } from "../types";
 
@@ -10,37 +11,33 @@ type WorkspaceTabsProps = {
 
 export function WorkspaceTabs({ activeTab, phoneCount, goofishCount, onChange }: WorkspaceTabsProps) {
   return (
-    <nav className="workspace-tabs" aria-label="功能切换">
-      <button
-        className={activeTab === "parameters" ? "active" : ""}
-        type="button"
-        onClick={() => onChange("parameters")}
-        aria-current={activeTab === "parameters" ? "page" : undefined}
-      >
-        <SlidersHorizontal size={17} />
-        参数
-        <span>{phoneCount.toLocaleString("zh-CN")}</span>
-      </button>
-      <button
-        className={activeTab === "ranking" ? "active" : ""}
-        type="button"
-        onClick={() => onChange("ranking")}
-        aria-current={activeTab === "ranking" ? "page" : undefined}
-      >
-        <ChartNoAxesColumnIncreasing size={17} />
-        排行
-        <span>4</span>
-      </button>
-      <button
-        className={activeTab === "goofish" ? "active" : ""}
-        type="button"
-        onClick={() => onChange("goofish")}
-        aria-current={activeTab === "goofish" ? "page" : undefined}
-      >
-        <ShoppingBag size={17} />
-        闲鱼
-        <span>{goofishCount.toLocaleString("zh-CN")}</span>
-      </button>
-    </nav>
+    <Tabs value={activeTab} onChange={(value) => onChange((value ?? "parameters") as WorkspaceTab)} className="workspace-tab-control">
+      <Tabs.List aria-label="功能切换">
+        <Tabs.Tab value="parameters" leftSection={<SlidersHorizontal size={16} />}>
+          <Text span fw={700}>
+            参数
+          </Text>
+          <Badge variant="light" color="gray" size="sm" ml={8}>
+            {phoneCount.toLocaleString("zh-CN")}
+          </Badge>
+        </Tabs.Tab>
+        <Tabs.Tab value="ranking" leftSection={<ChartNoAxesColumnIncreasing size={16} />}>
+          <Text span fw={700}>
+            排行
+          </Text>
+          <Badge variant="light" color="gray" size="sm" ml={8}>
+            4
+          </Badge>
+        </Tabs.Tab>
+        <Tabs.Tab value="goofish" leftSection={<ShoppingBag size={16} />}>
+          <Text span fw={700}>
+            闲鱼
+          </Text>
+          <Badge variant="light" color="gray" size="sm" ml={8}>
+            {goofishCount.toLocaleString("zh-CN")}
+          </Badge>
+        </Tabs.Tab>
+      </Tabs.List>
+    </Tabs>
   );
 }

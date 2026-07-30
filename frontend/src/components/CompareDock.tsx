@@ -1,3 +1,4 @@
+import { ActionIcon, Button, Group, Paper, Text } from "@mantine/core";
 import { Columns3, Trash2, X } from "lucide-react";
 import type { CompareSelection } from "../types";
 
@@ -10,28 +11,30 @@ type CompareDockProps = {
 
 export function CompareDock({ selection, onOpen, onRemove, onClear }: CompareDockProps) {
   return (
-    <section className="compare-dock" aria-label="对比栏">
-      <div className="compare-dock-items">
-        {selection.map((item) => (
-          <span className="compare-chip" key={item.config_id}>
-            <strong>{item.phone_name}</strong>
-            <em>{item.title}</em>
-            <button type="button" onClick={() => onRemove(item.config_id)} aria-label="移除">
-              <X size={14} />
-            </button>
-          </span>
-        ))}
-      </div>
-      <div className="compare-dock-actions">
-        <button className="text-button" type="button" onClick={onClear}>
-          <Trash2 size={14} />
-          清空
-        </button>
-        <button className="icon-button" type="button" onClick={onOpen} disabled={selection.length < 2}>
-          <Columns3 size={16} />
-          对比 {selection.length}
-        </button>
-      </div>
-    </section>
+    <Paper withBorder radius="md" shadow="md" p="md" className="compare-dock" aria-label="对比栏">
+      <Group justify="space-between" align="center" gap="md" wrap="nowrap" className="compare-dock-content">
+        <div className="compare-dock-items">
+          {selection.map((item) => (
+            <div className="compare-chip" key={item.config_id}>
+              <span>
+                <Text component="strong">{item.phone_name}</Text>
+                <Text component="em">{item.title}</Text>
+              </span>
+              <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => onRemove(item.config_id)} aria-label="移除">
+                <X size={12} />
+              </ActionIcon>
+            </div>
+          ))}
+        </div>
+        <Group className="compare-dock-actions" gap="xs">
+          <Button size="sm" variant="subtle" leftSection={<Trash2 size={14} />} onClick={onClear}>
+            清空
+          </Button>
+          <Button size="sm" leftSection={<Columns3 size={16} />} onClick={onOpen} disabled={selection.length < 2}>
+            对比 {selection.length}
+          </Button>
+        </Group>
+      </Group>
+    </Paper>
   );
 }

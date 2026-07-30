@@ -1,3 +1,4 @@
+import { Alert, Button, Center, Group, SimpleGrid, Stack, Text, Title } from "@mantine/core";
 import { ArrowDownUp, SearchX } from "lucide-react";
 import type { Phone, SortKey } from "../types";
 import { sortLabel } from "../utils/phone";
@@ -28,44 +29,54 @@ export function PhoneResults({
 }: PhoneResultsProps) {
   return (
     <>
-      <section className="result-header" aria-label="列表状态">
-        <div>
-          <strong>{totalCount.toLocaleString("zh-CN")}</strong>
-          <span> 条结果</span>
-        </div>
-        <div className="result-meta">
-          <span className="muted">已展示 {Math.min(visibleCount, totalCount).toLocaleString("zh-CN")}</span>
-          <span className="muted">
-            <ArrowDownUp size={15} /> {sortLabel(sortKey)}
-          </span>
-        </div>
-      </section>
+      <Group justify="space-between" align="center" className="result-header" aria-label="列表状态">
+        <Text fw={800}>
+          {totalCount.toLocaleString("zh-CN")} <Text span c="dimmed" fw={400}>条结果</Text>
+        </Text>
+        <Group gap="md" className="result-meta">
+          <Text c="dimmed" size="sm">
+            已展示 {Math.min(visibleCount, totalCount).toLocaleString("zh-CN")}
+          </Text>
+          <Text c="dimmed" size="sm">
+            <ArrowDownUp size={15} style={{ display: "inline", marginRight: 4 }} />
+            {sortLabel(sortKey)}
+          </Text>
+        </Group>
+      </Group>
 
-      {loading && <div className="state-box">正在加载数据</div>}
-      {error && <div className="state-box error-box">接口连接失败：{error}</div>}
+      {loading && <Alert variant="light" color="gray" title="正在加载数据" />}
+      {error && (
+        <Alert variant="light" color="red" title="接口连接失败">
+          {error}
+        </Alert>
+      )}
 
       {!loading && !error && (
         <>
           {totalCount === 0 ? (
-            <div className="state-box empty-state">
-              <SearchX size={24} />
-              <strong>没有匹配机型</strong>
-              <span>换一个关键词或品牌筛选</span>
-            </div>
+            <Center mih={200}>
+              <Stack align="center" gap="xs">
+                <SearchX size={24} />
+                <Title order={4}>没有匹配机型</Title>
+                <Text c="dimmed" size="sm">
+                  换一个关键词或品牌筛选
+                </Text>
+              </Stack>
+            </Center>
           ) : (
-            <section className="phone-grid" aria-label="手机列表">
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="sm" className="phone-grid" aria-label="手机列表">
               {phones.map((phone, index) => (
                 <PhoneCard key={phone.id} phone={phone} index={index} onOpenVersions={onOpenVersions} />
               ))}
-            </section>
+            </SimpleGrid>
           )}
 
           {canLoadMore && (
-            <div className="load-more-row">
-              <button className="load-more" type="button" onClick={onLoadMore}>
+            <Center mt="md">
+              <Button size="sm" variant="light" onClick={onLoadMore}>
                 加载更多
-              </button>
-            </div>
+              </Button>
+            </Center>
           )}
         </>
       )}

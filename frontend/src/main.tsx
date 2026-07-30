@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
+import { MantineProvider } from "@mantine/core";
 import { BadgeCheck, ChartNoAxesColumnIncreasing, CircleDollarSign, SearchCheck, ShoppingBag, Smartphone } from "lucide-react";
 import { API_BASE, PAGE_SIZE } from "./constants";
 import { CompareDock } from "./components/CompareDock";
@@ -29,6 +30,8 @@ import { formatPrice, formatScore } from "./utils/format";
 import { normalizePhoneBrand, normalizePhoneSeries } from "./utils/brand";
 import { matchesGoofishSpecFilters, parseKeywords } from "./utils/goofish";
 import { compareName, comparePrice, compareReleaseDateDesc } from "./utils/phone";
+import { theme } from "./theme";
+import "@mantine/core/styles.css";
 import "./styles.css";
 
 function isSocmarkPath() {
@@ -260,6 +263,16 @@ function App({ onOpenSocmark }: AppProps) {
       const data = (await response.json()) as { detail?: unknown };
       if (typeof data.detail === "string" && data.detail.trim()) {
         return data.detail.trim();
+      }
+      if (data.detail && typeof data.detail === "object") {
+        const detail = data.detail as { message?: unknown; detail?: unknown };
+        if (typeof detail.message === "string" && detail.message.trim()) {
+          return detail.message.trim();
+        }
+        if (typeof detail.detail === "string" && detail.detail.trim()) {
+          return detail.detail.trim();
+        }
+        return JSON.stringify(data.detail);
       }
     } catch {
       // Fall back to the status code when the backend does not return JSON.
@@ -751,7 +764,7 @@ function App({ onOpenSocmark }: AppProps) {
         />
       )}
 
-      {compareSelection.length > 0 && !selectedPhone && (
+      {compareSelection.length > 0 && (
         <CompareDock
           selection={compareSelection}
           onOpen={() => setCompareOpen(true)}
@@ -777,6 +790,8 @@ function App({ onOpenSocmark }: AppProps) {
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <RootApp />
+    <MantineProvider theme={theme} defaultColorScheme="dark">
+      <RootApp />
+    </MantineProvider>
   </React.StrictMode>
 );

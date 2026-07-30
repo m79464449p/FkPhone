@@ -1,3 +1,4 @@
+import { Badge, Button, Card, Group, Stack, Text, ThemeIcon } from "@mantine/core";
 import { ExternalLink, Layers3, MonitorSmartphone, SlidersHorizontal, Star } from "lucide-react";
 import type { CSSProperties } from "react";
 import { useState } from "react";
@@ -19,7 +20,7 @@ export function PhoneCard({ phone, index = 0, onOpenVersions }: PhoneCardProps) 
   const showImage = Boolean(displayImageUrl && !imageFailed);
 
   return (
-    <article className="phone-card" style={{ "--item-index": index } as CSSProperties}>
+    <Card withBorder radius="md" shadow="xs" className="phone-card" style={{ "--item-index": index } as CSSProperties}>
       <div className="phone-image">
         {showImage ? (
           <img src={displayImageUrl ?? ""} alt="" loading="lazy" onError={() => setImageFailed(true)} />
@@ -27,44 +28,54 @@ export function PhoneCard({ phone, index = 0, onOpenVersions }: PhoneCardProps) 
           <MonitorSmartphone size={32} />
         )}
       </div>
-      <div className="phone-content">
-        <div className="phone-title-row">
-          <h2>{phone.name}</h2>
-          <span className="brand-chip">{normalizedBrand}</span>
-        </div>
-        <div className="phone-value-row">
-          <strong className={phone.price == null ? "is-muted-value" : ""}>{formatPrice(phone.price)}</strong>
-          <span className={!phone.score ? "is-muted-score" : ""}>
-            <Star size={14} />
+      <Stack gap="xs" className="phone-content">
+        <Group justify="space-between" align="flex-start" wrap="nowrap">
+          <Text fw={800} lineClamp={2}>
+            {phone.name}
+          </Text>
+          <Badge variant="light" color="teal">
+            {normalizedBrand}
+          </Badge>
+        </Group>
+        <Group justify="space-between" align="center" wrap="nowrap">
+          <Text fw={800} c={phone.price == null ? "dimmed" : "red"}>
+            {formatPrice(phone.price)}
+          </Text>
+          <Text c={phone.score ? "gray" : "dimmed"} size="sm">
+            <Star size={14} style={{ display: "inline", marginRight: 4 }} />
             {formatScore(phone.score)}
-          </span>
-        </div>
-        <p className="specs">{phone.specs || "暂无规格"}</p>
-        <div className="phone-meta">
-          <span>
-            <Layers3 size={13} />
+          </Text>
+        </Group>
+        <Text size="sm" c="dimmed" lineClamp={3}>
+          {phone.specs || "暂无规格"}
+        </Text>
+        <Group gap="xs" wrap="nowrap">
+          <ThemeIcon size={20} radius="md" variant="light" color="gray">
+            <Layers3 size={12} />
+          </ThemeIcon>
+          <Text size="sm" c="dimmed">
             {phone.version_count || 0} 个版本
-          </span>
-        </div>
-        <div className="phone-actions">
-          <button
-            className="text-button"
+          </Text>
+        </Group>
+        <Group gap="xs" grow>
+          <Button
+            size="sm"
+            leftSection={<SlidersHorizontal size={14} />}
             data-testid="open-versions"
             type="button"
             onClick={() => onOpenVersions(phone)}
             disabled={!phone.version_count}
+            variant="light"
           >
-            <SlidersHorizontal size={14} />
             版本参数
-          </button>
+          </Button>
           {phone.source_url && (
-            <a className="source-link" href={phone.source_url} target="_blank" rel="noreferrer">
+            <Button size="sm" component="a" href={phone.source_url} target="_blank" rel="noreferrer" variant="subtle" rightSection={<ExternalLink size={14} />}>
               酷安 #{phone.source_product_id}
-              <ExternalLink size={14} />
-            </a>
+            </Button>
           )}
-        </div>
-      </div>
-    </article>
+        </Group>
+      </Stack>
+    </Card>
   );
 }

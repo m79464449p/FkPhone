@@ -148,8 +148,7 @@ def search_goofish(payload: GoofishSearchRequest) -> GoofishSearchResponse:
     output = f"{stdout}\n{stderr}"
     response_payload = parse_json_tail(output)
     if active_process.returncode != 0:
-        detail = response_payload or {"message": output[-2000:]}
-        raise HTTPException(status_code=500, detail=detail)
+        raise HTTPException(status_code=500, detail=format_process_error_detail(response_payload, output))
 
     if not response_payload:
         raise HTTPException(status_code=500, detail=output[-2000:])
@@ -196,8 +195,7 @@ def login_goofish(payload: GoofishSearchRequest) -> GoofishSearchResponse:
     output = f"{stdout}\n{stderr}"
     response_payload = parse_json_tail(output)
     if active_process.returncode != 0:
-        detail = response_payload or {"message": output[-2000:]}
-        raise HTTPException(status_code=500, detail=detail)
+        raise HTTPException(status_code=500, detail=format_process_error_detail(response_payload, output))
 
     if not response_payload:
         raise HTTPException(status_code=500, detail=output[-2000:])
@@ -283,3 +281,12 @@ def parse_json_tail(output: str) -> dict | None:
         except json.JSONDecodeError:
             continue
     return None
+
+
+def format_process_error_detail(response_payload: dict | None, output: str) -> str | dict:
+    if response_payload:
+        message = response_payload.get("message")
+        if isinstance(message, str) and message.strip():
+            return message.strip()
+        return response_payload
+    return output[-2000:] or "goofish process failed"

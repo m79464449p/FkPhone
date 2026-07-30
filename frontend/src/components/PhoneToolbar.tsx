@@ -1,4 +1,5 @@
-import { Braces, ChevronDown, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
+import { ActionIcon, Badge, Button, Group, Paper, Select, Stack, Text, TextInput } from "@mantine/core";
+import { Braces, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
 import type { ReactNode } from "react";
 import type { PhoneSpecFilter, SelectedSpecFilter, SortKey } from "../types";
 
@@ -70,75 +71,68 @@ export function PhoneToolbar({
     selectedSpecFilters.length > 0;
 
   return (
-    <aside className="filter-panel" aria-label="筛选工具">
+    <Paper component="aside" withBorder radius="md" p="md" className="filter-panel" aria-label="筛选工具">
       {headerContent ? (
         <div className="filter-dashboard-header workspace-dashboard-header">{headerContent}</div>
       ) : (
-        <div className="filter-panel-header">
-          <div>
-            <span className="detail-kicker">Filters</span>
-            <h2>筛选与排序</h2>
-          </div>
+        <Group justify="space-between" className="filter-panel-header">
+          <Stack gap={0}>
+            <Text size="xs" fw={800} tt="uppercase" c="teal.7">
+              Filters
+            </Text>
+            <Text fw={800}>筛选与排序</Text>
+          </Stack>
           <SlidersHorizontal size={18} />
-        </div>
+        </Group>
       )}
 
-      <div className="filter-stack">
-        <label className="filter-field">
-          <span>关键词</span>
-          <div className="search-field">
-            <Search size={18} />
-            <input
-              value={query}
-              onChange={(event) => onQueryChange(event.target.value)}
-              placeholder="型号、品牌、芯片、电池"
-            />
-          </div>
-        </label>
+      <Stack gap="sm" className="filter-stack">
+        <TextInput
+          size="sm"
+          label="关键词"
+          leftSection={<Search size={18} />}
+          value={query}
+          onChange={(event) => onQueryChange(event.target.value)}
+          placeholder="型号、品牌、芯片、电池"
+        />
 
-        <label className="filter-field">
-          <span>品牌</span>
-          <label className="select-field">
-            <select value={brand} onChange={(event) => onBrandChange(event.target.value)}>
-              <option value="all">全部品牌</option>
-              {brands.map(([name, count]) => (
-                <option key={name} value={name}>
-                  {name} ({count})
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="select-chevron" size={18} />
-          </label>
-        </label>
+        <Select
+          size="sm"
+          label="品牌"
+          value={brand}
+          onChange={(value) => onBrandChange(value ?? "all")}
+          data={[
+            { value: "all", label: "全部品牌" },
+            ...brands.map(([name, count]) => ({ value: name, label: `${name} (${count})` }))
+          ]}
+          searchable
+        />
 
-        <label className="filter-field">
-          <span>系列</span>
-          <label className="select-field">
-            <select value={series} onChange={(event) => onSeriesChange(event.target.value)}>
-              <option value="all">全部系列</option>
-              {seriesOptions.map(([name, count]) => (
-                <option key={name} value={name}>
-                  {name} ({count})
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="select-chevron" size={18} />
-          </label>
-        </label>
+        <Select
+          size="sm"
+          label="系列"
+          value={series}
+          onChange={(value) => onSeriesChange(value ?? "all")}
+          data={[
+            { value: "all", label: "全部系列" },
+            ...seriesOptions.map(([name, count]) => ({ value: name, label: `${name} (${count})` }))
+          ]}
+          searchable
+        />
 
-        <label className="filter-field">
-          <span>排序</span>
-          <label className="select-field">
-            <select value={sortKey} onChange={(event) => onSortChange(event.target.value as SortKey)}>
-              <option value="release_desc">发布时间降序</option>
-              <option value="score">评分最高</option>
-              <option value="price_asc">价格从低到高</option>
-              <option value="price_desc">价格从高到低</option>
-              <option value="name">名称</option>
-            </select>
-            <ChevronDown className="select-chevron" size={18} />
-          </label>
-        </label>
+        <Select
+          size="sm"
+          label="排序"
+          value={sortKey}
+          onChange={(value) => onSortChange((value ?? "release_desc") as SortKey)}
+          data={[
+            { value: "release_desc", label: "发布时间降序" },
+            { value: "score", label: "评分最高" },
+            { value: "price_asc", label: "价格从低到高" },
+            { value: "price_desc", label: "价格从高到低" },
+            { value: "name", label: "名称" }
+          ]}
+        />
 
         <details className="advanced-filter-block" aria-label="详情参数筛选">
           <summary className="advanced-filter-title">
@@ -146,80 +140,64 @@ export function PhoneToolbar({
             <em>{specFiltersLoading ? "加载中" : `${specFilterOptions.length.toLocaleString("zh-CN")} 项`}</em>
           </summary>
 
-          <label className="filter-field">
-            <span>参数名</span>
-            <label className="select-field">
-              <select value={pendingSpecKey} onChange={(event) => onPendingSpecKeyChange(event.target.value)}>
-                <option value="">选择详情参数</option>
-                {specFilterOptions.map((option) => (
-                  <option key={option.key} value={option.key}>
-                    {option.label} ({option.values.length})
-                  </option>
+          <Stack gap="sm" mt="sm">
+            <Select
+              size="sm"
+              label="参数名"
+              value={pendingSpecKey || null}
+              onChange={(value) => onPendingSpecKeyChange(value ?? "")}
+              data={specFilterOptions.map((option) => ({ value: option.key, label: `${option.label} (${option.values.length})` }))}
+              placeholder="选择详情参数"
+              searchable
+            />
+
+            <Select
+              size="sm"
+              label="参数值"
+              value={pendingSpecValue || null}
+              onChange={(value) => onPendingSpecValueChange(value ?? "")}
+              disabled={!pendingSpecKey}
+              data={availableSpecValues.map((option) => ({ value: option.value, label: `${option.value} (${option.phone_count})` }))}
+              placeholder={pendingSpecKey ? "选择参数值" : "先选参数名"}
+              searchable
+            />
+
+            <Button size="sm" leftSection={<Plus size={14} />} type="button" onClick={onAddSpecFilter} disabled={!canAddSpecFilter} variant="light">
+              添加参数条件
+            </Button>
+
+            {selectedSpecFilters.length > 0 && (
+              <Group gap="xs" className="selected-spec-filters" aria-label="已选详情参数">
+                {selectedSpecFilters.map((filter) => (
+                  <Badge key={`${filter.key}-${filter.value}`} variant="light" color="teal">
+                    <Group gap={4} wrap="nowrap">
+                      <span>{filter.label} / {filter.value}</span>
+                      <ActionIcon variant="subtle" color="gray" size="xs" onClick={() => onRemoveSpecFilter(filter.key, filter.value)} aria-label="移除参数条件">
+                        <X size={12} />
+                      </ActionIcon>
+                    </Group>
+                  </Badge>
                 ))}
-              </select>
-              <ChevronDown className="select-chevron" size={18} />
-            </label>
-          </label>
-
-          <label className="filter-field">
-            <span>参数值</span>
-            <label className="select-field">
-              <select
-                value={pendingSpecValue}
-                onChange={(event) => onPendingSpecValueChange(event.target.value)}
-                disabled={!pendingSpecKey}
-              >
-                <option value="">{pendingSpecKey ? "选择参数值" : "先选参数名"}</option>
-                {availableSpecValues.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.value} ({option.phone_count})
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="select-chevron" size={18} />
-            </label>
-          </label>
-
-          <button className="text-button add-spec-filter-button" type="button" onClick={onAddSpecFilter} disabled={!canAddSpecFilter}>
-            <Plus size={14} />
-            添加参数条件
-          </button>
-
-          {selectedSpecFilters.length > 0 && (
-            <div className="selected-spec-filters" aria-label="已选详情参数">
-              {selectedSpecFilters.map((filter) => (
-                <span className="selected-spec-chip" key={`${filter.key}-${filter.value}`}>
-                  <strong>{filter.label}</strong>
-                  <em>{filter.value}</em>
-                  <button type="button" onClick={() => onRemoveSpecFilter(filter.key, filter.value)} aria-label="移除参数条件">
-                    <X size={13} />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
+              </Group>
+            )}
+          </Stack>
         </details>
+      </Stack>
 
-      </div>
-
-      <div className="filter-actions">
-        <button className="icon-button" onClick={onOpenSocmark} type="button">
-          <Braces size={18} />
+      <Group className="filter-actions" gap="xs" mt="md" wrap="wrap">
+        <Button size="sm" variant="light" leftSection={<Braces size={18} />} onClick={onOpenSocmark} type="button">
           接口
-        </button>
-        <button className="icon-button" onClick={onRefresh} type="button">
-          <RefreshCw size={18} />
+        </Button>
+        <Button size="sm" variant="light" leftSection={<RefreshCw size={18} />} onClick={onRefresh} type="button">
           刷新
-        </button>
-        <button className="icon-button secondary-button" onClick={onSync} type="button" disabled={syncing}>
-          <RefreshCw size={18} />
-          {syncing ? "同步中" : "同步酷安"}
-        </button>
-        <button className="text-button clear-filter-button" onClick={onClear} type="button" disabled={!hasActiveFilters}>
-          <X size={14} />
+        </Button>
+        <Button size="sm" leftSection={<RefreshCw size={18} />} onClick={onSync} type="button" loading={syncing}>
+          同步酷安
+        </Button>
+        <Button size="sm" variant="subtle" color="gray" leftSection={<X size={14} />} onClick={onClear} type="button" disabled={!hasActiveFilters}>
           重置
-        </button>
-      </div>
-    </aside>
+        </Button>
+      </Group>
+    </Paper>
   );
 }

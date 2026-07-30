@@ -1,8 +1,24 @@
+import {
+  ActionIcon,
+  Alert,
+  Badge,
+  Button,
+  Group,
+  Image,
+  Modal,
+  Paper,
+  ScrollArea,
+  Select,
+  SimpleGrid,
+  Stack,
+  Table,
+  Text,
+  TextInput
+} from "@mantine/core";
+import { ChevronLeft, ChevronRight, ExternalLink, HardDrive, MemoryStick, RefreshCw, Search, ShoppingBag, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
-import { createPortal } from "react-dom";
 import type { CSSProperties } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, ExternalLink, HardDrive, MemoryStick, RefreshCw, Search, ShoppingBag, Trash2, X } from "lucide-react";
 import { RAM_FILTER_OPTIONS, STORAGE_FILTER_OPTIONS } from "../constants";
 import type { GoofishListing } from "../types";
 import { formatDuration, formatPrice } from "../utils/format";
@@ -32,6 +48,12 @@ type GoofishPanelProps = {
   onResetSession: () => void;
 };
 
+type PreviewState = {
+  title: string;
+  images: string[];
+  index: number;
+};
+
 export function GoofishPanel({
   headerContent,
   keywordInput,
@@ -54,7 +76,7 @@ export function GoofishPanel({
   onRefresh,
   onResetSession
 }: GoofishPanelProps) {
-  const [preview, setPreview] = useState<{ title: string; images: string[]; index: number } | null>(null);
+  const [preview, setPreview] = useState<PreviewState | null>(null);
 
   useEffect(() => {
     if (!preview) return;
@@ -92,7 +114,14 @@ export function GoofishPanel({
     if (/极好|优秀|很好|优质/.test(credit)) return "excellent";
     if (/良好|较好|好/.test(credit)) return "good";
     if (/一般|普通/.test(credit)) return "fair";
-    return "default";
+    return "unknown";
+  }
+
+  function getCreditBadgeColor(tone: string) {
+    if (tone === "excellent") return "teal";
+    if (tone === "good") return "blue";
+    if (tone === "fair") return "yellow";
+    return "gray";
   }
 
   function getListingImages(listing: GoofishListing) {
@@ -104,7 +133,7 @@ export function GoofishPanel({
     setPreview({ title, images, index });
   }
 
-  function movePreview(current: typeof preview, direction: number) {
+  function movePreview(current: PreviewState | null, direction: number) {
     if (!current || current.images.length === 0) return current;
     return {
       ...current,
@@ -113,245 +142,216 @@ export function GoofishPanel({
   }
 
   return (
-    <section className="goofish-panel" aria-label="闲鱼搜索">
+    <Paper component="section" withBorder radius="md" p="md" className="goofish-panel" aria-label="闲鱼搜索">
       {headerContent && <div className="workspace-dashboard-header goofish-dashboard-header">{headerContent}</div>}
 
-      <header className="goofish-header">
-        <div>
-          <span className="detail-kicker">Goofish</span>
-          <h2>闲鱼监控</h2>
-        </div>
-        <span className="goofish-count">
-          <ShoppingBag size={16} />
+      <Group justify="space-between" align="center" className="goofish-header" mb="sm">
+        <Stack gap={0}>
+          <Text size="xs" fw={800} tt="uppercase" c="teal.7">
+            Goofish
+          </Text>
+          <Text fw={800} fz="lg">
+            闲鱼监控
+          </Text>
+        </Stack>
+        <Badge variant="light" color="teal" leftSection={<ShoppingBag size={14} />}>
           {listings.length.toLocaleString("zh-CN")} 条
-        </span>
-      </header>
+        </Badge>
+      </Group>
 
-      <div className="goofish-controls">
-        <label className="search-field">
-          <Search size={18} />
-          <input
+      <Stack gap="sm">
+        <div className="goofish-controls">
+          <TextInput
+            className="goofish-keyword-field"
+            label="关键词"
+            leftSection={<Search size={18} />}
             value={keywordInput}
             onChange={(event) => onKeywordInputChange(event.target.value)}
             onKeyDown={handleKeywordKeyDown}
             placeholder="关键词，用逗号分隔"
           />
-        </label>
-        <button className="icon-button" type="button" onClick={onSearch} disabled={searching}>
-          <RefreshCw size={18} />
-          {searching ? "等待登录/搜索" : "搜索闲鱼"}
-        </button>
-        <button className="icon-button secondary-button" type="button" onClick={onLogin} disabled={searching}>
-          <ShoppingBag size={18} />
-          登录闲鱼
-        </button>
-        <button className="icon-button secondary-button" type="button" onClick={onRefresh} disabled={loading}>
-          <RefreshCw size={18} />
-          {loading ? "刷新中" : "刷新列表"}
-        </button>
-        <button
-          className="icon-button secondary-button"
-          type="button"
-          onClick={onResetSession}
-          disabled={searching}
-          title="清空服务器端闲鱼 Cookie 和浏览器 profile"
-        >
-          <Trash2 size={18} />
-          清空登录态
-        </button>
-      </div>
+          <Group gap="xs" justify="flex-end" wrap="wrap" className="goofish-action-group">
+            <Button size="sm" leftSection={<RefreshCw size={18} />} onClick={onSearch} disabled={searching} variant="light">
+              {searching ? "等待登录/搜索" : "搜索闲鱼"}
+            </Button>
+            <Button size="sm" leftSection={<ShoppingBag size={18} />} onClick={onLogin} disabled={searching} variant="light">
+              登录闲鱼
+            </Button>
+            <Button size="sm" leftSection={<RefreshCw size={18} />} onClick={onRefresh} disabled={loading} variant="light">
+              {loading ? "刷新中" : "刷新列表"}
+            </Button>
+            <Button size="sm" color="gray" variant="subtle" leftSection={<Trash2 size={18} />} onClick={onResetSession} disabled={searching}>
+              清空登录态
+            </Button>
+          </Group>
+        </div>
 
-      <div className="goofish-filter-row" aria-label="闲鱼筛选条件">
-        <label className="spec-filter-field">
-          <Search size={18} />
-          <span>名称筛选</span>
-          <input
+        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm" className="goofish-filter-row" aria-label="闲鱼筛选条件">
+          <TextInput
+            label="名称筛选"
+            leftSection={<Search size={18} />}
             value={nameFilter}
             onChange={(event) => onNameFilterChange(event.target.value)}
             placeholder="全部"
             aria-label="按名称筛选闲鱼商品"
           />
-        </label>
-        <label className="spec-filter-field">
-          <HardDrive size={18} />
-          <span>存储容量</span>
-          <select value={storageFilter} onChange={(event) => onStorageFilterChange(event.target.value)}>
-            <option value="">全部</option>
-            {STORAGE_FILTER_OPTIONS.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-          <ChevronDown className="select-chevron" size={18} />
-        </label>
-        <label className="spec-filter-field">
-          <MemoryStick size={18} />
-          <span>运行内存</span>
-          <select value={ramFilter} onChange={(event) => onRamFilterChange(event.target.value)}>
-            <option value="">全部</option>
-            {RAM_FILTER_OPTIONS.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-          <ChevronDown className="select-chevron" size={18} />
-        </label>
-      </div>
+          <Select
+            label="存储容量"
+            leftSection={<HardDrive size={18} />}
+            data={STORAGE_FILTER_OPTIONS}
+            value={storageFilter || null}
+            onChange={(value) => onStorageFilterChange(value ?? "")}
+            placeholder="全部"
+            clearable
+            searchable
+          />
+          <Select
+            label="运行内存"
+            leftSection={<MemoryStick size={18} />}
+            data={RAM_FILTER_OPTIONS}
+            value={ramFilter || null}
+            onChange={(value) => onRamFilterChange(value ?? "")}
+            placeholder="全部"
+            clearable
+            searchable
+          />
+        </SimpleGrid>
 
-      {message && <div className="sync-message">{message}</div>}
-      {searching && (
-        <div className="sync-message goofish-wait-message">
-          <span>
-            正在检查闲鱼登录态，已等待 {formatDuration(searchElapsedSeconds)}；如果弹出 Chromium 窗口，请在 10 分钟内扫码登录。
-          </span>
-          <button className="inline-cancel-button" type="button" onClick={onCancelSearch}>
-            取消等待
-          </button>
-        </div>
-      )}
-      {error && <div className="sync-message error-message">闲鱼接口失败：{error}</div>}
+        {message && <Alert variant="light" color="gray">{message}</Alert>}
+        {searching && (
+          <Alert variant="light" color="teal" title={`正在检查闲鱼登录态，已等待 ${formatDuration(searchElapsedSeconds)}`}>
+            如果弹出 Chromium 窗口，请在 10 分钟内扫码登录。
+            <Button mt="sm" size="xs" variant="subtle" onClick={onCancelSearch}>
+              取消等待
+            </Button>
+          </Alert>
+        )}
+        {error && <Alert variant="light" color="red">闲鱼接口失败：{error}</Alert>}
 
-      <div className="goofish-table-wrap">
-        <table className="goofish-table">
-          <thead>
-            <tr>
-              <th>商品</th>
-              <th>价格</th>
-              <th>地区</th>
-              <th>热度</th>
-              <th>关键词</th>
-              <th>链接</th>
-            </tr>
-          </thead>
-          <tbody>
-            {listings.map((listing, index) => {
-              const specs = inferGoofishSpecs(listing);
-              const sellerCredit = listing.seller_credit || "信用暂无";
-              const imageUrls = getListingImages(listing);
-              const displayImageUrl = getDisplayImageUrl(imageUrls[0] || null);
-              return (
-                <tr key={listing.item_id} style={{ "--item-index": index } as CSSProperties}>
-                  <td className="goofish-product-cell">
-                    <div className="goofish-product-layout">
-                      <button
-                        className="goofish-thumb"
-                        type="button"
-                        onClick={() => openPreview(listing.title, imageUrls)}
-                        disabled={imageUrls.length === 0}
-                        aria-label="预览商品图片"
-                      >
-                        {displayImageUrl ? (
-                          <img
-                            src={displayImageUrl}
-                            alt={listing.title}
-                            loading="lazy"
-                            onError={(event) => {
-                              event.currentTarget.style.display = "none";
-                              event.currentTarget.parentElement?.classList.add("image-missing");
-                            }}
-                          />
-                        ) : (
-                          <span>无图</span>
-                        )}
-                        {imageUrls.length > 1 && <em className="goofish-image-count">{imageUrls.length}</em>}
-                      </button>
-                      <div className="goofish-product-main">
-                        <span className="goofish-title-link">
-                          {listing.title}
-                        </span>
-                        <div className="goofish-spec-grid" aria-label="闲鱼商品关键信息">
-                          {specs.map((spec) => (
-                            <span className="goofish-spec" key={`${listing.item_id}-${spec.label}`}>
-                              <em>{spec.label}：</em>
-                              <b>{spec.value}</b>
-                            </span>
-                          ))}
+        <ScrollArea type="auto" className="goofish-table-wrap">
+          <Table striped highlightOnHover withTableBorder withColumnBorders className="goofish-table">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>商品</Table.Th>
+                <Table.Th>价格</Table.Th>
+                <Table.Th>地区</Table.Th>
+                <Table.Th>热度</Table.Th>
+                <Table.Th>关键词</Table.Th>
+                <Table.Th>链接</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {listings.map((listing, index) => {
+                const specs = inferGoofishSpecs(listing);
+                const sellerCredit = listing.seller_credit || "信用暂无";
+                const creditTone = getCreditTone(sellerCredit);
+                const imageUrls = getListingImages(listing);
+                const displayImageUrl = getDisplayImageUrl(imageUrls[0] || null);
+                return (
+                  <Table.Tr key={listing.item_id} style={{ "--item-index": index } as CSSProperties}>
+                    <Table.Td className="goofish-product-cell">
+                      <div className="goofish-product-layout">
+                        <button
+                          className="goofish-thumb"
+                          type="button"
+                          onClick={() => openPreview(listing.title, imageUrls)}
+                          disabled={imageUrls.length === 0}
+                          aria-label="预览商品图片"
+                        >
+                          {displayImageUrl ? (
+                            <img
+                              src={displayImageUrl}
+                              alt={listing.title}
+                              loading="lazy"
+                              onError={(event) => {
+                                event.currentTarget.style.display = "none";
+                                event.currentTarget.parentElement?.classList.add("image-missing");
+                              }}
+                            />
+                          ) : (
+                            <span>无图</span>
+                          )}
+                          {imageUrls.length > 1 && <em className="goofish-image-count">{imageUrls.length}</em>}
+                        </button>
+                        <div className="goofish-product-main">
+                          <Text fw={700} size="sm" className="goofish-title-link">
+                            {listing.title}
+                          </Text>
+                          <div className="goofish-spec-grid" aria-label="闲鱼商品关键信息">
+                            {specs.map((spec) => (
+                              <span className="goofish-spec" key={`${listing.item_id}-${spec.label}`}>
+                                <em>{spec.label}：</em>
+                                <b>{spec.value}</b>
+                              </span>
+                            ))}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </td>
-                  <td>
-                    <span className="goofish-price">{formatPrice(listing.price)}</span>
-                  </td>
-                  <td>{listing.location || "-"}</td>
-                  <td>
-                    <span className="goofish-engagement" aria-label="闲鱼热度">
-                      <span className="goofish-engagement-row">
-                        <b>{listing.want_count != null ? listing.want_count.toLocaleString("zh-CN") : "-"}</b>
-                        <em>人想要</em>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text fw={800} c="orange">
+                        {formatPrice(listing.price)}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>{listing.location || "-"}</Table.Td>
+                    <Table.Td>
+                      <span className="goofish-engagement" aria-label="闲鱼热度">
+                        <span className="goofish-engagement-row">
+                          <b>{listing.want_count != null ? listing.want_count.toLocaleString("zh-CN") : "-"}</b>
+                          <em>人想要</em>
+                        </span>
+                        <span className="goofish-engagement-row">
+                          <b>{listing.browse_count != null ? listing.browse_count.toLocaleString("zh-CN") : "-"}</b>
+                          <em>人浏览</em>
+                        </span>
+                        <Badge variant="light" color={getCreditBadgeColor(creditTone)} className={`goofish-credit-stamp ${creditTone}`}>
+                          {sellerCredit}
+                        </Badge>
                       </span>
-                      <span className="goofish-engagement-row">
-                        <b>{listing.browse_count != null ? listing.browse_count.toLocaleString("zh-CN") : "-"}</b>
-                        <em>人浏览</em>
-                      </span>
-                      <span className={`goofish-credit-stamp ${getCreditTone(sellerCredit)}`}>{sellerCredit}</span>
-                    </span>
-                  </td>
-                  <td>{listing.keywords.join(", ") || "-"}</td>
-                  <td>
-                    <a className="goofish-open-button" href={listing.source_url} target="_blank" rel="noreferrer">
-                      打开闲鱼
-                      <ExternalLink size={14} />
-                    </a>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        {!loading && listings.length === 0 && <div className="empty-table">暂无闲鱼商品</div>}
-      </div>
-      {preview && createPortal(
-        <div className="image-preview-backdrop" role="dialog" aria-modal="true" aria-label="商品图片预览" onClick={() => setPreview(null)}>
-          <div className="image-preview-shell" onClick={(event) => event.stopPropagation()}>
-            <button className="image-preview-close" type="button" onClick={() => setPreview(null)} aria-label="关闭预览">
-              <X size={20} />
-            </button>
-            <div className="image-preview-stage">
-              <button
-                className="image-preview-nav previous"
-                type="button"
-                onClick={() => setPreview((current) => movePreview(current, -1))}
-                disabled={preview.images.length < 2}
-                aria-label="上一张"
-              >
-                <ChevronLeft size={28} />
-              </button>
-              <img
-                key={preview.images[preview.index]}
-                src={getDisplayImageUrl(preview.images[preview.index]) || ""}
-                alt={preview.title}
-                onLoad={(event) => {
-                  event.currentTarget.style.display = "";
-                  event.currentTarget.parentElement?.classList.remove("image-missing");
-                }}
-                onError={(event) => {
-                  event.currentTarget.style.display = "none";
-                  event.currentTarget.parentElement?.classList.add("image-missing");
-                }}
-              />
-              <button
-                className="image-preview-nav next"
-                type="button"
-                onClick={() => setPreview((current) => movePreview(current, 1))}
-                disabled={preview.images.length < 2}
-                aria-label="下一张"
-              >
-                <ChevronRight size={28} />
-              </button>
-            </div>
-            <div className="image-preview-footer">
-              <span>{preview.title}</span>
-              <b>
+                    </Table.Td>
+                    <Table.Td>{listing.keywords.join(", ") || "-"}</Table.Td>
+                    <Table.Td>
+                      <Button component="a" href={listing.source_url} target="_blank" rel="noreferrer" size="xs" variant="light" rightSection={<ExternalLink size={14} />}>
+                        打开闲鱼
+                      </Button>
+                    </Table.Td>
+                  </Table.Tr>
+                );
+              })}
+            </Table.Tbody>
+          </Table>
+        </ScrollArea>
+        {!loading && listings.length === 0 && <Alert variant="light" color="gray">暂无闲鱼商品</Alert>}
+      </Stack>
+
+      <Modal opened={Boolean(preview)} onClose={() => setPreview(null)} title={preview?.title ?? "商品图片预览"} size="xl" centered>
+        {preview && (
+          <Stack gap="sm">
+            <Group justify="space-between" align="center">
+              <Text size="sm" c="dimmed">
                 {preview.index + 1} / {preview.images.length}
-              </b>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-    </section>
+              </Text>
+              <Group gap="xs">
+                <ActionIcon variant="light" onClick={() => setPreview((current) => movePreview(current, -1))} disabled={preview.images.length < 2} aria-label="上一张">
+                  <ChevronLeft size={18} />
+                </ActionIcon>
+                <ActionIcon variant="light" onClick={() => setPreview((current) => movePreview(current, 1))} disabled={preview.images.length < 2} aria-label="下一张">
+                  <ChevronRight size={18} />
+                </ActionIcon>
+              </Group>
+            </Group>
+            <Image
+              src={getDisplayImageUrl(preview.images[preview.index]) || ""}
+              alt={preview.title}
+              fit="contain"
+              h={560}
+              onError={(event) => {
+                event.currentTarget.style.display = "none";
+              }}
+            />
+          </Stack>
+        )}
+      </Modal>
+    </Paper>
   );
 }

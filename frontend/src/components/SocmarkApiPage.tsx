@@ -1,3 +1,18 @@
+import {
+  Alert,
+  Badge,
+  Button,
+  Group,
+  Paper,
+  ScrollArea,
+  Select,
+  SimpleGrid,
+  Stack,
+  Text,
+  Textarea,
+  TextInput,
+  Title
+} from "@mantine/core";
 import { ArrowLeft, Braces, Play, RefreshCw, Server, ShieldAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { API_BASE } from "../constants";
@@ -197,198 +212,224 @@ export function SocmarkApiPage() {
   }
 
   return (
-    <main className="app-shell socmark-shell">
-      <section className="socmark-topbar">
-        <a
-          className="socmark-back"
-          href="/"
-          onClick={(event) => {
-            event.preventDefault();
-            returnDashboard();
-          }}
-        >
-          <ArrowLeft size={16} />
+    <Paper component="main" className="app-shell socmark-shell" withBorder radius="md" p="md">
+      <Group justify="space-between" align="center" className="socmark-topbar" mb="md">
+        <Button component="a" href="/" variant="light" leftSection={<ArrowLeft size={16} />} onClick={(event) => {
+          event.preventDefault();
+          returnDashboard();
+        }}>
           返回看板
-        </a>
-        <div>
-          <p className="eyebrow">Socmark API</p>
-          <h1>手机性能排行接口调试</h1>
-        </div>
-        <button className="header-sync-button" type="button" onClick={() => window.location.reload()} disabled={loadingCatalog}>
-          <RefreshCw size={16} />
+        </Button>
+        <Stack gap={0} align="center">
+          <Text size="xs" fw={800} tt="uppercase" c="teal.7">
+            Socmark API
+          </Text>
+          <Title order={1}>手机性能排行接口调试</Title>
+        </Stack>
+        <Button leftSection={<RefreshCw size={16} />} onClick={() => window.location.reload()} loading={loadingCatalog}>
           刷新目录
-        </button>
-      </section>
+        </Button>
+      </Group>
 
-      <section className="socmark-alert">
-        <ShieldAlert size={18} />
-        <span>
-          实际看板数据来自后端本地库 <strong>/api/phones</strong>，当前已有 <strong>{localDataMessage || "读取中"}</strong>。
-          这里调的是 APK 上游接口：已补 native battery、混淆 headers 和 Lfe 加密请求体；如果服务端返回错误哨兵会在响应里标出。
-        </span>
-      </section>
+      <Alert variant="light" color="teal" icon={<ShieldAlert size={18} />} className="socmark-alert" mb="md">
+        实际看板数据来自后端本地库 <strong>/api/phones</strong>，当前已有 <strong>{localDataMessage || "读取中"}</strong>。
+        这里调的是 APK 上游接口：已补 native battery、混淆 headers 和 Lfe 加密请求体；如果服务端返回错误哨兵会在响应里标出。
+      </Alert>
 
-      <section className="socmark-panel socmark-local-data">
-        <div>
-          <p className="eyebrow">Local Data</p>
-          <h2>{localDataMessage || "正在读取本地数据..."}</h2>
-        </div>
-        <div className="socmark-local-list">
+      <Paper withBorder radius="md" p="md" className="socmark-panel socmark-local-data" mb="md">
+        <Group justify="space-between" align="center" mb="sm">
+          <Stack gap={0}>
+            <Text size="xs" fw={800} tt="uppercase" c="teal.7">
+              Local Data
+            </Text>
+            <Text fw={800}>{localDataMessage || "正在读取本地数据..."}</Text>
+          </Stack>
+        </Group>
+        <Group gap="xs" wrap="wrap" mb="sm" className="socmark-local-list">
           {localPhones.map((phone) => (
-            <span key={phone.id}>
-              <strong>{phone.name}</strong>
-              <em>{phone.score ? `${(phone.score / 10).toFixed(1)} 分` : "暂无评分"}</em>
-            </span>
+            <Badge key={phone.id} variant="light" color="gray">
+              <Stack gap={0}>
+                <Text fw={700} size="xs">
+                  {phone.name}
+                </Text>
+                <Text size="xs" c="dimmed">
+                  {phone.score ? `${(phone.score / 10).toFixed(1)} 分` : "暂无评分"}
+                </Text>
+              </Stack>
+            </Badge>
           ))}
-        </div>
-        <a className="text-button" href="/" onClick={(event) => {
+        </Group>
+        <Button component="a" href="/" variant="subtle" onClick={(event) => {
           event.preventDefault();
           returnDashboard();
         }}>
           查看看板数据
-        </a>
-      </section>
+        </Button>
+      </Paper>
 
-      <section className="socmark-layout">
-        <section className="socmark-panel">
-          <div className="socmark-panel-title">
+      <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md" className="socmark-layout">
+        <Paper withBorder radius="md" p="md" className="socmark-panel">
+          <Group gap="xs" mb="md">
             <Server size={18} />
-            <h2>请求</h2>
-          </div>
+            <Title order={3}>请求</Title>
+          </Group>
 
-          <label className="socmark-field">
-            <span>接口</span>
-            <select value={selectedEndpointKey} onChange={(event) => changeEndpoint(event.target.value)} disabled={!catalog}>
-              {(catalog?.endpoints ?? []).map((endpoint) => (
-                <option key={endpoint.key} value={endpoint.key}>
-                  {endpoint.method} /{endpoint.path} - {endpoint.description}
-                </option>
-              ))}
-            </select>
-          </label>
+          <Stack gap="sm">
+            <Select
+              label="接口"
+              value={selectedEndpointKey || null}
+              onChange={(value) => changeEndpoint(value ?? "")}
+              disabled={!catalog}
+              data={(catalog?.endpoints ?? []).map((endpoint) => ({
+                value: endpoint.key,
+                label: `${endpoint.method} /${endpoint.path} - ${endpoint.description}`
+              }))}
+              searchable
+            />
 
-          <label className="socmark-field">
-            <span>上游地址</span>
-            <select value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} disabled={!catalog}>
-              {(catalog?.base_urls ?? []).map((url) => (
-                <option key={url} value={url}>
-                  {url}
-                </option>
-              ))}
-            </select>
-          </label>
+            <Select
+              label="上游地址"
+              value={baseUrl || null}
+              onChange={(value) => setBaseUrl(value ?? "")}
+              disabled={!catalog}
+              data={catalog?.base_urls ?? []}
+              searchable
+            />
 
-          <div className="socmark-grid">
-            <label className="socmark-field">
-              <span>datastr</span>
-              <input value={datastr} onChange={(event) => setDatastr(event.target.value)} placeholder="abcde" />
-            </label>
-            <label className="socmark-field">
-              <span>uniid</span>
-              <input value={uniid} onChange={(event) => setUniid(event.target.value)} placeholder="留空自动生成" />
-            </label>
-          </div>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm" className="socmark-grid">
+              <TextInput label="datastr" value={datastr} onChange={(event) => setDatastr(event.target.value)} placeholder="abcde" />
+              <TextInput label="uniid" value={uniid} onChange={(event) => setUniid(event.target.value)} placeholder="留空自动生成" />
+            </SimpleGrid>
 
-          <label className="socmark-field">
-            <span>请求体 JSON</span>
-            <textarea
+            <Textarea
+              label="请求体 JSON"
               value={payloadText}
               onChange={(event) => setPayloadText(event.target.value)}
               disabled={selectedEndpoint?.method === "GET"}
+              autosize
+              minRows={8}
               spellCheck={false}
             />
-          </label>
 
-          <label className="socmark-field">
-            <span>额外 headers JSON</span>
-            <textarea value={headersText} onChange={(event) => setHeadersText(event.target.value)} spellCheck={false} />
-          </label>
+            <Textarea
+              label="额外 headers JSON"
+              value={headersText}
+              onChange={(event) => setHeadersText(event.target.value)}
+              autosize
+              minRows={6}
+              spellCheck={false}
+            />
 
-          <label className="socmark-field">
-            <span>APK 高级参数 JSON</span>
-            <textarea value={apkOptionsText} onChange={(event) => setApkOptionsText(event.target.value)} spellCheck={false} />
-          </label>
+            <Textarea
+              label="APK 高级参数 JSON"
+              value={apkOptionsText}
+              onChange={(event) => setApkOptionsText(event.target.value)}
+              autosize
+              minRows={6}
+              spellCheck={false}
+            />
 
-          <div className="socmark-actions">
-            <button className="text-button" type="button" onClick={formatPayload}>
-              <Braces size={15} />
-              格式化
-            </button>
-            <button className="text-button" type="button" onClick={resetPayload}>
-              重置样例
-            </button>
-            <button className="icon-button" type="button" onClick={() => void callEndpoint()} disabled={calling || loadingCatalog || !selectedEndpoint}>
-              <Play size={16} />
-              {calling ? "调用中" : "调用接口"}
-            </button>
-          </div>
+            <Group gap="xs" wrap="wrap" className="socmark-actions">
+              <Button size="sm" variant="light" leftSection={<Braces size={15} />} onClick={formatPayload}>
+                格式化
+              </Button>
+              <Button size="sm" variant="subtle" onClick={resetPayload}>
+                重置样例
+              </Button>
+              <Button size="sm" leftSection={<Play size={16} />} onClick={() => void callEndpoint()} loading={calling} disabled={loadingCatalog || !selectedEndpoint}>
+                调用接口
+              </Button>
+            </Group>
 
-          {message && <div className="state-box error-box">{message}</div>}
-        </section>
+            {message && <Alert variant="light" color="red">{message}</Alert>}
+          </Stack>
+        </Paper>
 
-        <section className="socmark-panel">
-          <div className="socmark-panel-title">
+        <Paper withBorder radius="md" p="md" className="socmark-panel">
+          <Group gap="xs" mb="md">
             <Braces size={18} />
-            <h2>响应</h2>
-          </div>
+            <Title order={3}>响应</Title>
+          </Group>
 
-          {!result && <div className="state-box">{loadingCatalog ? "正在读取后端接口目录..." : "还没有调用结果"}</div>}
+          {!result && (
+            <Alert variant="light" color="gray">
+              {loadingCatalog ? "正在读取后端接口目录..." : "还没有调用结果"}
+            </Alert>
+          )}
 
           {result && (
-            <div className="socmark-response">
-              <div className="socmark-status-row">
-                <strong>HTTP {result.status_code}</strong>
-                <span>{result.method} {result.url}</span>
-              </div>
+            <Stack gap="md" className="socmark-response">
+              <Paper withBorder radius="md" p="sm">
+                <Group justify="space-between" align="center" className="socmark-status-row">
+                  <Badge variant="filled" color={result.status_code >= 400 ? "red" : "teal"}>
+                    HTTP {result.status_code}
+                  </Badge>
+                  <Text size="sm" c="dimmed">
+                    {result.method} {result.url}
+                  </Text>
+                </Group>
+              </Paper>
 
-              <h3>Header 复现状态</h3>
-              <div className="socmark-header-status">
-                {result.header_status.map((item) => (
-                  <span key={item.key} className={item.state === "generated" ? "is-generated" : "is-missing"} title={item.note}>
-                    <code>{item.key}</code>
-                    <em>{item.state === "generated" ? "已生成" : "缺参数"}</em>
-                  </span>
-                ))}
-              </div>
+              <Stack gap="sm" className="socmark-header-status">
+                <Title order={4}>Header 复现状态</Title>
+                <Group gap="xs" wrap="wrap">
+                  {result.header_status.map((item) => (
+                    <Badge key={item.key} variant={item.state === "generated" ? "filled" : "light"} color={item.state === "generated" ? "teal" : "yellow"} title={item.note}>
+                      {item.key}
+                    </Badge>
+                  ))}
+                </Group>
+              </Stack>
 
-              <h3>响应体</h3>
-              <pre>{result.body !== null ? prettyJson(result.body) : result.body_text}</pre>
-
-              <h3>解密状态</h3>
-              <pre>
-                {prettyJson({
+              <SectionPanel title="响应体" content={result.body !== null ? prettyJson(result.body) : result.body_text} />
+              <SectionPanel
+                title="解密状态"
+                content={prettyJson({
                   server_response_key: result.server_response_key ?? null,
                   decrypted_body_text: result.decrypted_body_text ?? null
                 })}
-              </pre>
-
-              <h3>请求体明文</h3>
-              <pre>{result.request_body_text || "{}"}</pre>
-
-              <h3>实际上游请求体</h3>
-              <pre>{result.request_body_sent_text || "(empty)"}</pre>
-
-              <h3>响应 headers</h3>
-              <pre>{prettyJson(result.response_headers)}</pre>
-
-              <h3>实际请求 headers</h3>
-              <pre>{prettyJson(result.request_headers)}</pre>
-            </div>
+              />
+              <SectionPanel title="请求体明文" content={result.request_body_text || "{}"} />
+              <SectionPanel title="实际上游请求体" content={result.request_body_sent_text || "(empty)"} />
+              <SectionPanel title="响应 headers" content={prettyJson(result.response_headers)} />
+              <SectionPanel title="实际请求 headers" content={prettyJson(result.request_headers)} />
+            </Stack>
           )}
-        </section>
-      </section>
+        </Paper>
+      </SimpleGrid>
 
       {catalog && (
-        <section className="socmark-panel socmark-notes">
-          <h2>已同步 headers 线索</h2>
-          {Object.entries(catalog.header_notes).map(([key, note]) => (
-            <p key={key}>
-              <code>{key}</code>
-              <span>{note}</span>
-            </p>
-          ))}
-        </section>
+        <Paper withBorder radius="md" p="md" className="socmark-panel socmark-notes" mt="md">
+          <Title order={3} mb="sm">
+            已同步 headers 线索
+          </Title>
+          <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="sm">
+            {Object.entries(catalog.header_notes).map(([key, note]) => (
+              <Paper key={key} withBorder radius="sm" p="sm" bg="var(--mantine-color-dark-7)">
+                <Text fw={800} size="sm" mb={4}>
+                  <code>{key}</code>
+                </Text>
+                <Text size="sm" c="dimmed">
+                  {note}
+                </Text>
+              </Paper>
+            ))}
+          </SimpleGrid>
+        </Paper>
       )}
-    </main>
+    </Paper>
+  );
+}
+
+function SectionPanel({ title, content }: { title: string; content: string }) {
+  return (
+    <Paper withBorder radius="md" p="sm">
+      <Title order={4} mb="xs">
+        {title}
+      </Title>
+      <ScrollArea type="auto" h={180}>
+        <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{content}</pre>
+      </ScrollArea>
+    </Paper>
   );
 }

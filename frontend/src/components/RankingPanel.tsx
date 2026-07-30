@@ -1,3 +1,4 @@
+import { Button, Group, Paper, Stack, Text, Title } from "@mantine/core";
 import { ExternalLink } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
@@ -21,37 +22,49 @@ type RankingPanelProps = {
 export function RankingPanel({ headerContent }: RankingPanelProps) {
   const [rankingPath, setRankingPath] = useState("allperf");
   const activeView = RANKING_VIEWS.find((view) => view.key === rankingPath) ?? RANKING_VIEWS[0];
-  const rankingUrl = `https://www.socpk.com/${rankingPath}/`;
+  const rankingUrl = rankingPath === "allperf" ? "https://www.socpk.com/" : `https://www.socpk.com/${rankingPath}/`;
 
   return (
-    <section className="ranking-panel" aria-label="性能排行">
+    <Paper component="section" withBorder radius="md" p="md" className="ranking-panel" aria-label="性能排行">
       {headerContent && <div className="workspace-dashboard-header ranking-dashboard-header">{headerContent}</div>}
 
-      <header className="ranking-header">
-        <div>
-          <span className="detail-kicker">SOCPK</span>
-          <h2>{activeView.title}</h2>
-        </div>
-        <a className="ranking-open-link" href={rankingUrl} target="_blank" rel="noreferrer">
-          <ExternalLink size={16} />
+      <Group justify="space-between" align="center" className="ranking-header">
+        <Stack gap={0}>
+          <Text size="xs" fw={800} tt="uppercase" c="teal.7">
+            SOCPK
+          </Text>
+          <Title order={3}>{activeView.title}</Title>
+        </Stack>
+        <Button
+          className="ranking-open-link"
+          component="a"
+          href={rankingUrl}
+          target="_blank"
+          rel="noreferrer"
+          variant="light"
+          rightSection={<ExternalLink size={16} />}
+        >
           原页
-        </a>
-      </header>
+        </Button>
+      </Group>
 
-      <div className="ranking-tabs" aria-label="性能榜单切换">
+      <Group className="ranking-tabs" aria-label="性能榜单切换" gap="xs">
         {RANKING_VIEWS.map((view) => (
-          <button
+          <Button
             className={view.key === rankingPath ? "active" : ""}
             key={view.key}
             type="button"
+            variant={view.key === rankingPath ? "filled" : "light"}
             onClick={() => setRankingPath(view.key)}
           >
             {view.label}
-          </button>
+          </Button>
         ))}
-      </div>
+      </Group>
 
-      <iframe className="ranking-frame" title={activeView.title} src={rankingUrl} loading="lazy" />
-    </section>
+      <div className="ranking-frame-shell">
+        <iframe className="ranking-frame" title={activeView.title} src={rankingUrl} loading="lazy" />
+      </div>
+    </Paper>
   );
 }

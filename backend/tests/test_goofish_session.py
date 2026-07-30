@@ -34,6 +34,21 @@ class GoofishSessionResetTest(unittest.TestCase):
             self.assertFalse(cookie_file.exists())
             self.assertFalse(profile_dir.exists())
 
+    def test_format_process_error_detail_prefers_payload_message(self):
+        detail = goofish.format_process_error_detail(
+            {"status": "error", "message": "闲鱼需要重新登录", "matched": 0},
+            "debug output",
+        )
+
+        self.assertEqual(detail, "闲鱼需要重新登录")
+
+    def test_format_process_error_detail_falls_back_to_output_tail(self):
+        output = "x" * 2100
+
+        detail = goofish.format_process_error_detail(None, output)
+
+        self.assertEqual(detail, "x" * 2000)
+
 
 if __name__ == "__main__":
     unittest.main()
