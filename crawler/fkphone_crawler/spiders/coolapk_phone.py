@@ -12,6 +12,10 @@ class CoolapkPhoneSpider(scrapy.Spider):
     custom_settings = {
         "ROBOTSTXT_OBEY": False,
         "CONCURRENT_REQUESTS": 4,
+        # A stalled version endpoint must not hold the whole sync until the
+        # backend's 180-second subprocess timeout.
+        "DOWNLOAD_TIMEOUT": 15,
+        "RETRY_TIMES": 0,
         "LOG_LEVEL": "INFO",
     }
     start_urls = [
