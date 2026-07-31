@@ -108,6 +108,14 @@ export type GoofishSearchResponse = {
   message: string | null;
 };
 
+export type GoofishLoginStatus = {
+  status: string;
+  active: boolean;
+  message: string;
+  screenshot_available: boolean;
+  screenshot_version: number;
+};
+
 export type GoofishSpec = {
   label: string;
   value: string;

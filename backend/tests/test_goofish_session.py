@@ -4,6 +4,7 @@ from pathlib import Path
 
 from app.config import settings
 from app.routers import goofish
+from app.services.goofish_login_session import GoofishLoginSession
 
 
 class GoofishSessionResetTest(unittest.TestCase):
@@ -48,6 +49,38 @@ class GoofishSessionResetTest(unittest.TestCase):
         detail = goofish.format_process_error_detail(None, output)
 
         self.assertEqual(detail, "x" * 2000)
+
+    def test_login_session_rejects_invalid_phone_before_start(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            session = GoofishLoginSession(root / "profile", root / "login.png", headless=True)
+
+            with self.assertRaisesRegex(ValueError, "11 位"):
+                session.send_sms("123")
+
+    def test_login_session_rejects_invalid_code_before_start(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            session = GoofishLoginSession(root / "profile", root / "login.png", headless=True)
+
+            with self.assertRaisesRegex(ValueError, "短信验证码"):
+                session.verify("12ab")
+
+    def test_login_session_initial_status_is_idle(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            session = GoofishLoginSession(root / "profile", root / "login.png", headless=True)
+
+            self.assertEqual(
+                session.status(),
+                {
+                    "status": "idle",
+                    "active": False,
+                    "message": "尚未启动闲鱼登录。",
+                    "screenshot_available": False,
+                    "screenshot_version": 0,
+                },
+            )
 
 
 if __name__ == "__main__":

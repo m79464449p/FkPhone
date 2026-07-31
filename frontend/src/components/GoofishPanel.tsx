@@ -17,11 +17,11 @@ import {
   TextInput
 } from "@mantine/core";
 import { ChevronLeft, ChevronRight, ExternalLink, HardDrive, KeyRound, MemoryStick, RefreshCw, Search, ShoppingBag, Trash2, Upload, X } from "lucide-react";
-import { useEffect, useState } from "react";
-import type { KeyboardEvent, ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { KeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import type { CSSProperties } from "react";
-import { RAM_FILTER_OPTIONS, STORAGE_FILTER_OPTIONS } from "../constants";
-import type { GoofishListing } from "../types";
+import { API_BASE, RAM_FILTER_OPTIONS, STORAGE_FILTER_OPTIONS } from "../constants";
+import type { GoofishListing, GoofishLoginStatus } from "../types";
 import { formatDuration, formatPrice } from "../utils/format";
 import { inferGoofishSpecs } from "../utils/goofish";
 import { getDisplayImageUrl } from "../utils/images";
@@ -43,6 +43,14 @@ type GoofishPanelProps = {
   onStorageFilterChange: (value: string) => void;
   onRamFilterChange: (value: string) => void;
   onLogin: () => void;
+  loginOpen: boolean;
+  loginStatus: GoofishLoginStatus | null;
+  loginBusy: boolean;
+  onLoginClose: () => void;
+  onSendSms: (phone: string) => Promise<void>;
+  onVerifyLogin: (code: string) => Promise<void>;
+  onLoginClick: (x: number, y: number) => Promise<void>;
+  onLoginDrag: (startX: number, startY: number, endX: number, endY: number) => Promise<void>;
   onImportCookie: (cookie: string) => Promise<void>;
   onSearch: () => void;
   onCancelSearch: () => void;
@@ -73,6 +81,14 @@ export function GoofishPanel({
   onStorageFilterChange,
   onRamFilterChange,
   onLogin,
+  loginOpen,
+  loginStatus,
+  loginBusy,
+  onLoginClose,
+  onSendSms,
+  onVerifyLogin,
+  onLoginClick,
+  onLoginDrag,
   onImportCookie,
   onSearch,
   onCancelSearch,
@@ -82,6 +98,9 @@ export function GoofishPanel({
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [cookieModalOpen, setCookieModalOpen] = useState(false);
   const [cookieInput, setCookieInput] = useState("");
+  const [loginPhone, setLoginPhone] = useState("");
+  const [loginCode, setLoginCode] = useState("");
+  const loginPointerStart = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     if (!preview) return;
@@ -144,6 +163,41 @@ export function GoofishPanel({
       ...current,
       index: (current.index + direction + current.images.length) % current.images.length
     };
+  }
+
+  function getLoginImagePoint(event: ReactPointerEvent<HTMLImageElement>) {
+    const image = event.currentTarget;
+    const bounds = image.getBoundingClientRect();
+    const imageRatio = image.naturalWidth / image.naturalHeight;
+    const boundsRatio = bounds.width / bounds.height;
+    const renderedWidth = boundsRatio > imageRatio ? bounds.height * imageRatio : bounds.width;
+    const renderedHeight = boundsRatio > imageRatio ? bounds.height : bounds.width / imageRatio;
+    const offsetX = (bounds.width - renderedWidth) / 2;
+    const offsetY = (bounds.height - renderedHeight) / 2;
+    return {
+      x: Math.max(0, Math.min(image.naturalWidth, Math.round((event.clientX - bounds.left - offsetX) * (image.naturalWidth / renderedWidth)))),
+      y: Math.max(0, Math.min(image.naturalHeight, Math.round((event.clientY - bounds.top - offsetY) * (image.naturalHeight / renderedHeight))))
+    };
+  }
+
+  function handleLoginPointerDown(event: ReactPointerEvent<HTMLImageElement>) {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    loginPointerStart.current = getLoginImagePoint(event);
+  }
+
+  function handleLoginPointerUp(event: ReactPointerEvent<HTMLImageElement>) {
+    event.preventDefault();
+    const start = loginPointerStart.current;
+    loginPointerStart.current = null;
+    if (!start) return;
+    const end = getLoginImagePoint(event);
+    const distance = Math.hypot(end.x - start.x, end.y - start.y);
+    if (distance < 8) {
+      void onLoginClick(end.x, end.y);
+    } else {
+      void onLoginDrag(start.x, start.y, end.x, end.y);
+    }
   }
 
   return (
@@ -228,13 +282,75 @@ export function GoofishPanel({
         {message && <Alert variant="light" color="gray">{message}</Alert>}
         {searching && (
           <Alert variant="light" color="teal" title={`正在检查闲鱼登录态，已等待 ${formatDuration(searchElapsedSeconds)}`}>
-            如果弹出 Chromium 窗口，请在 10 分钟内扫码登录。
+            服务器正在处理闲鱼请求，请在登录弹窗中完成验证。
             <Button mt="sm" size="xs" variant="subtle" onClick={onCancelSearch}>
               取消等待
             </Button>
           </Alert>
         )}
         {error && <Alert variant="light" color="red">闲鱼接口失败：{error}</Alert>}
+
+        <Modal opened={loginOpen} onClose={onLoginClose} title="登录闲鱼" centered size="lg">
+          <Stack gap="sm">
+            <Alert variant="light" color={loginStatus?.status === "success" ? "teal" : "gray"}>
+              {loginStatus?.message || "正在启动服务器登录会话..."}
+            </Alert>
+            {loginStatus?.status !== "success" && (
+              <>
+                <Group align="flex-end" wrap="wrap">
+                  <TextInput
+                    label="手机号"
+                    value={loginPhone}
+                    onChange={(event) => setLoginPhone(event.currentTarget.value)}
+                    placeholder="中国大陆手机号"
+                    style={{ flex: "1 1 220px" }}
+                  />
+                  <Button
+                    variant="light"
+                    loading={loginBusy}
+                    disabled={!loginStatus?.active || !/^1\d{10}$/.test(loginPhone.trim())}
+                    onClick={() => void onSendSms(loginPhone)}
+                  >
+                    获取验证码
+                  </Button>
+                </Group>
+                <Group align="flex-end" wrap="wrap">
+                  <TextInput
+                    label="短信验证码"
+                    value={loginCode}
+                    onChange={(event) => setLoginCode(event.currentTarget.value)}
+                    placeholder="验证码"
+                    style={{ flex: "1 1 220px" }}
+                  />
+                  <Button
+                    loading={loginBusy}
+                    disabled={!loginStatus?.active || !/^\d{4,8}$/.test(loginCode.trim())}
+                    onClick={() => void onVerifyLogin(loginCode)}
+                  >
+                    验证并登录
+                  </Button>
+                </Group>
+              </>
+            )}
+            {loginStatus?.screenshot_available && (
+              <div className="goofish-login-screen">
+                <Text size="xs" c="dimmed">服务器登录画面</Text>
+                <img
+                  src={`${API_BASE}/api/goofish/login/screenshot?v=${loginStatus.screenshot_version}`}
+                  alt="闲鱼服务器登录画面"
+                  draggable={false}
+                  onPointerDown={handleLoginPointerDown}
+                  onPointerUp={handleLoginPointerUp}
+                />
+              </div>
+            )}
+            <Group justify="flex-end">
+              <Button variant="subtle" color="gray" onClick={onLoginClose}>
+                {loginStatus?.status === "success" ? "完成" : "取消"}
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
 
         <Modal opened={cookieModalOpen} onClose={() => setCookieModalOpen(false)} title="导入闲鱼 Cookie" centered>
           <Stack gap="sm">

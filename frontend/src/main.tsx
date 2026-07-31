@@ -16,6 +16,7 @@ import { WorkspaceTabs } from "./components/WorkspaceTabs";
 import type {
   CompareSelection,
   GoofishListing,
+  GoofishLoginStatus,
   GoofishSearchResponse,
   PerformanceFloor,
   Phone,
@@ -104,6 +105,9 @@ function App({ onOpenSocmark }: AppProps) {
   const [goofishSearchElapsedSeconds, setGoofishSearchElapsedSeconds] = useState(0);
   const [goofishMessage, setGoofishMessage] = useState("");
   const [goofishError, setGoofishError] = useState("");
+  const [goofishLoginOpen, setGoofishLoginOpen] = useState(false);
+  const [goofishLoginStatus, setGoofishLoginStatus] = useState<GoofishLoginStatus | null>(null);
+  const [goofishLoginBusy, setGoofishLoginBusy] = useState(false);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("parameters");
   const compareRequestId = useRef(0);
   const goofishSearchAbortRef = useRef<AbortController | null>(null);
@@ -184,6 +188,37 @@ function App({ onOpenSocmark }: AppProps) {
     const timer = window.setInterval(updateElapsed, 1000);
     return () => window.clearInterval(timer);
   }, [goofishSearching, goofishSearchStartedAt]);
+
+  useEffect(() => {
+    if (!goofishLoginOpen || !goofishLoginStatus?.active) return;
+
+    let stopped = false;
+    let timer: number | undefined;
+    const poll = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/goofish/login`, { cache: "no-store" });
+        if (!response.ok) throw new Error(await readErrorMessage(response));
+        const status = (await response.json()) as GoofishLoginStatus;
+        if (stopped) return;
+        setGoofishLoginStatus(status);
+        setGoofishMessage(status.message);
+        if (!status.active) {
+          setGoofishSearching(false);
+          setGoofishSearchStartedAt(null);
+          if (status.status === "success") await loadGoofishListings();
+          return;
+        }
+      } catch (err) {
+        if (!stopped) setGoofishError(err instanceof Error ? err.message : "登录状态获取失败");
+      }
+      if (!stopped) timer = window.setTimeout(poll, 1500);
+    };
+    timer = window.setTimeout(poll, 800);
+    return () => {
+      stopped = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [goofishLoginOpen, goofishLoginStatus?.active]);
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
@@ -334,8 +369,9 @@ function App({ onOpenSocmark }: AppProps) {
   async function loginGoofish() {
     setGoofishSearching(true);
     setGoofishSearchStartedAt(Date.now());
-    setGoofishMessage("正在打开闲鱼登录窗口...");
+    setGoofishMessage("正在连接闲鱼登录页...");
     setGoofishError("");
+    setGoofishLoginOpen(true);
     try {
       const response = await fetch(`${API_BASE}/api/goofish/login`, {
         method: "POST",
@@ -343,18 +379,69 @@ function App({ onOpenSocmark }: AppProps) {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          keywords: ["login"],
           login_timeout_seconds: 600
         })
       });
       if (!response.ok) {
         throw new Error(await readErrorMessage(response));
       }
-      const result = (await response.json()) as GoofishSearchResponse;
-      setGoofishMessage(result.message || "闲鱼登录已完成");
+      const result = (await response.json()) as GoofishLoginStatus;
+      setGoofishLoginStatus(result);
+      setGoofishMessage(result.message);
     } catch (err) {
       setGoofishError(err instanceof Error ? err.message : "登录失败");
+      setGoofishSearching(false);
+      setGoofishSearchStartedAt(null);
+    }
+  }
+
+  async function sendGoofishSms(phone: string) {
+    await updateGoofishLogin("/api/goofish/login/sms", { phone });
+  }
+
+  async function verifyGoofishLogin(code: string) {
+    await updateGoofishLogin("/api/goofish/login/verify", { code });
+  }
+
+  async function clickGoofishLogin(x: number, y: number) {
+    await updateGoofishLogin("/api/goofish/login/click", { x, y }, false);
+  }
+
+  async function dragGoofishLogin(startX: number, startY: number, endX: number, endY: number) {
+    await updateGoofishLogin("/api/goofish/login/drag", {
+      start_x: startX,
+      start_y: startY,
+      end_x: endX,
+      end_y: endY
+    }, false);
+  }
+
+  async function updateGoofishLogin(path: string, body: object, showBusy = true) {
+    if (showBusy) setGoofishLoginBusy(true);
+    setGoofishError("");
+    try {
+      const response = await fetch(`${API_BASE}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (!response.ok) throw new Error(await readErrorMessage(response));
+      const status = (await response.json()) as GoofishLoginStatus;
+      setGoofishLoginStatus(status);
+      setGoofishMessage(status.message);
+    } catch (err) {
+      setGoofishError(err instanceof Error ? err.message : "登录操作失败");
     } finally {
+      if (showBusy) setGoofishLoginBusy(false);
+    }
+  }
+
+  async function cancelGoofishLogin() {
+    try {
+      await fetch(`${API_BASE}/api/goofish/login`, { method: "DELETE" });
+    } finally {
+      setGoofishLoginOpen(false);
+      setGoofishLoginStatus(null);
       setGoofishSearching(false);
       setGoofishSearchStartedAt(null);
     }
@@ -703,6 +790,14 @@ function App({ onOpenSocmark }: AppProps) {
           onStorageFilterChange={setGoofishStorageFilter}
           onRamFilterChange={setGoofishRamFilter}
           onLogin={() => void loginGoofish()}
+          loginOpen={goofishLoginOpen}
+          loginStatus={goofishLoginStatus}
+          loginBusy={goofishLoginBusy}
+          onLoginClose={() => void cancelGoofishLogin()}
+          onSendSms={sendGoofishSms}
+          onVerifyLogin={verifyGoofishLogin}
+          onLoginClick={clickGoofishLogin}
+          onLoginDrag={dragGoofishLogin}
           onImportCookie={importGoofishCookie}
           onSearch={() => void searchGoofish()}
           onCancelSearch={() => void cancelGoofishSearch()}

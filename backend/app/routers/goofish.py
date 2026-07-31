@@ -7,15 +7,18 @@ import threading
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.database import get_connection
 from app.services.goofish_browser_search import has_mtop_login_cookies, write_cookie_file
+from app.services.goofish_login_session import GoofishLoginSession
 
 router = APIRouter(prefix="/goofish", tags=["goofish"])
 goofish_process_lock = threading.Lock()
 goofish_process: subprocess.Popen[str] | None = None
+goofish_login_session: GoofishLoginSession | None = None
 
 
 class GoofishListing(BaseModel):
@@ -68,8 +71,41 @@ class GoofishCookieImportResponse(BaseModel):
     message: str
 
 
+class GoofishLoginRequest(BaseModel):
+    login_timeout_seconds: int | None = Field(default=None, ge=30, le=600)
+
+
+class GoofishLoginStatusResponse(BaseModel):
+    status: str
+    active: bool
+    message: str
+    screenshot_available: bool
+    screenshot_version: int
+
+
+class GoofishLoginSmsRequest(BaseModel):
+    phone: str = Field(min_length=11, max_length=20)
+
+
+class GoofishLoginVerifyRequest(BaseModel):
+    code: str = Field(min_length=4, max_length=8)
+
+
+class GoofishLoginPointerRequest(BaseModel):
+    x: float = Field(ge=0, le=1440)
+    y: float = Field(ge=0, le=1000)
+
+
+class GoofishLoginDragRequest(BaseModel):
+    start_x: float = Field(ge=0, le=1440)
+    start_y: float = Field(ge=0, le=1000)
+    end_x: float = Field(ge=0, le=1440)
+    end_y: float = Field(ge=0, le=1000)
+
+
 @router.post("/cookie", response_model=GoofishCookieImportResponse)
 def import_goofish_cookie(payload: GoofishCookieImportRequest) -> GoofishCookieImportResponse:
+    stop_goofish_login()
     cookie_jar = parse_cookie_input(payload.cookie)
     if not has_mtop_login_cookies(cookie_jar):
         raise HTTPException(status_code=400, detail="Cookie 必须包含 _m_h5_tk 和 unb")
@@ -133,6 +169,8 @@ def search_goofish(payload: GoofishSearchRequest) -> GoofishSearchResponse:
     keywords = normalize_keywords(payload.keywords)
     if not keywords:
         raise HTTPException(status_code=400, detail="keywords are required")
+    if is_goofish_login_active():
+        raise HTTPException(status_code=409, detail="goofish login is already running")
 
     command = [
         sys.executable,
@@ -180,69 +218,95 @@ def search_goofish(payload: GoofishSearchRequest) -> GoofishSearchResponse:
     return GoofishSearchResponse(**response_payload)
 
 
-@router.post("/login", response_model=GoofishSearchResponse)
-def login_goofish(payload: GoofishSearchRequest) -> GoofishSearchResponse:
-    global goofish_process
-
-    command = [
-        sys.executable,
-        "-m",
-        "app.services.goofish_browser_search",
-        "--login-only",
-        "--login-timeout",
-        str(payload.login_timeout_seconds or settings.goofish_login_timeout_seconds),
-    ]
-
-    timeout = payload.login_timeout_seconds or settings.goofish_login_timeout_seconds
+@router.post("/login", response_model=GoofishLoginStatusResponse)
+def login_goofish(payload: GoofishLoginRequest) -> GoofishLoginStatusResponse:
     with goofish_process_lock:
         if goofish_process and goofish_process.poll() is None:
             raise HTTPException(status_code=409, detail="goofish search is already running")
-        goofish_process = subprocess.Popen(
-            command,
-            cwd=Path(__file__).resolve().parents[2],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        active_process = goofish_process
+    status = get_goofish_login_session().start(
+        payload.login_timeout_seconds or settings.goofish_login_timeout_seconds
+    )
+    return GoofishLoginStatusResponse(**status)
 
+
+@router.get("/login", response_model=GoofishLoginStatusResponse)
+def get_goofish_login_status() -> GoofishLoginStatusResponse:
+    return GoofishLoginStatusResponse(**get_goofish_login_session().status())
+
+
+@router.post("/login/sms", response_model=GoofishLoginStatusResponse)
+def send_goofish_login_sms(payload: GoofishLoginSmsRequest) -> GoofishLoginStatusResponse:
     try:
-        stdout, stderr = active_process.communicate(timeout=timeout + 30)
-    except subprocess.TimeoutExpired as exc:
-        terminate_goofish_process()
-        raise HTTPException(status_code=504, detail="goofish login timed out") from exc
-    finally:
-        with goofish_process_lock:
-            if goofish_process is active_process and active_process.poll() is not None:
-                goofish_process = None
+        status = get_goofish_login_session().send_sms(payload.phone)
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=409 if isinstance(exc, RuntimeError) else 400, detail=str(exc)) from exc
+    return GoofishLoginStatusResponse(**status)
 
-    output = f"{stdout}\n{stderr}"
-    response_payload = parse_json_tail(output)
-    if active_process.returncode != 0:
-        raise HTTPException(status_code=500, detail=format_process_error_detail(response_payload, output))
 
-    if not response_payload:
-        raise HTTPException(status_code=500, detail=output[-2000:])
+@router.post("/login/verify", response_model=GoofishLoginStatusResponse)
+def verify_goofish_login(payload: GoofishLoginVerifyRequest) -> GoofishLoginStatusResponse:
+    try:
+        status = get_goofish_login_session().verify(payload.code)
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=409 if isinstance(exc, RuntimeError) else 400, detail=str(exc)) from exc
+    return GoofishLoginStatusResponse(**status)
 
-    return GoofishSearchResponse(**response_payload)
+
+@router.post("/login/click", response_model=GoofishLoginStatusResponse)
+def click_goofish_login(payload: GoofishLoginPointerRequest) -> GoofishLoginStatusResponse:
+    try:
+        status = get_goofish_login_session().click(payload.x, payload.y)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return GoofishLoginStatusResponse(**status)
+
+
+@router.post("/login/drag", response_model=GoofishLoginStatusResponse)
+def drag_goofish_login(payload: GoofishLoginDragRequest) -> GoofishLoginStatusResponse:
+    try:
+        status = get_goofish_login_session().drag(payload.start_x, payload.start_y, payload.end_x, payload.end_y)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return GoofishLoginStatusResponse(**status)
+
+
+@router.get("/login/screenshot")
+def get_goofish_login_screenshot() -> FileResponse:
+    screenshot_path = get_goofish_login_session().screenshot_path
+    if not screenshot_path.exists():
+        raise HTTPException(status_code=404, detail="login screenshot is not ready")
+    return FileResponse(
+        screenshot_path,
+        media_type="image/png",
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
+
+
+@router.delete("/login")
+def cancel_goofish_login() -> dict[str, bool]:
+    return {"cancelled": stop_goofish_login()}
 
 
 @router.delete("/search")
 def cancel_goofish_search() -> dict[str, bool]:
-    return {"cancelled": terminate_goofish_process()}
+    search_cancelled = terminate_goofish_process()
+    login_cancelled = stop_goofish_login()
+    return {"cancelled": search_cancelled or login_cancelled}
 
 
 @router.delete("/session", response_model=GoofishSessionResetResponse)
 def reset_goofish_session() -> GoofishSessionResetResponse:
-    search_cancelled = terminate_goofish_process()
+    process_cancelled = terminate_goofish_process()
+    login_cancelled = stop_goofish_login()
     cookie_file_removed = remove_path(resolve_app_path(settings.goofish_cookie_file))
+    remove_path(resolve_app_path(settings.goofish_cookie_file).with_name("login-screenshot.png"))
     profile_removed = remove_path(resolve_app_path(settings.goofish_profile_dir))
     return GoofishSessionResetResponse(
         status="ok",
         cookie_file_removed=cookie_file_removed,
         profile_removed=profile_removed,
-        search_cancelled=search_cancelled,
-        message="已清空服务器端闲鱼登录态。线上禁用了可视化登录窗口，重新登录需要导入有效 Cookie 或临时开启 GOOFISH_HEADLESS=false。",
+        search_cancelled=process_cancelled or login_cancelled,
+        message="已清空服务器端闲鱼登录态。请重新完成手机号验证码登录或导入有效 Cookie。",
     )
 
 
@@ -269,6 +333,34 @@ def terminate_goofish_process() -> bool:
 def resolve_app_path(value: str) -> Path:
     path = Path(value)
     return path if path.is_absolute() else Path(__file__).resolve().parents[2] / path
+
+
+def get_goofish_login_session() -> GoofishLoginSession:
+    global goofish_login_session
+
+    profile_dir = resolve_app_path(settings.goofish_profile_dir)
+    cookie_file = resolve_app_path(settings.goofish_cookie_file)
+    screenshot_path = cookie_file.with_name("login-screenshot.png")
+    if goofish_login_session and not goofish_login_session.matches(
+        profile_dir, screenshot_path, settings.goofish_headless
+    ):
+        goofish_login_session.stop()
+        goofish_login_session = None
+    if not goofish_login_session:
+        goofish_login_session = GoofishLoginSession(
+            profile_dir=profile_dir,
+            screenshot_path=screenshot_path,
+            headless=settings.goofish_headless,
+        )
+    return goofish_login_session
+
+
+def is_goofish_login_active() -> bool:
+    return bool(goofish_login_session and goofish_login_session.status()["active"])
+
+
+def stop_goofish_login() -> bool:
+    return bool(goofish_login_session and goofish_login_session.stop())
 
 
 def remove_path(path: Path) -> bool:
