@@ -99,11 +99,10 @@ class CoolapkPhoneSpider(scrapy.Spider):
     ]
 
     def parse(self, response):
-        yield from self.parse_phone_list(response)
-
+        # The landing page is the popularity ranking. Reuse its session, then
+        # request the AJAX list ordered by when products were added to Coolapk.
         max_pages = self.settings.getint("COOLAPK_MAX_PAGES", 1)
-        if max_pages >= 2:
-            yield self.build_page_request(2, max_pages)
+        yield self.build_page_request(1, max_pages)
 
     def parse_ajax(self, response):
         payload = json.loads(response.text)
@@ -124,7 +123,7 @@ class CoolapkPhoneSpider(scrapy.Spider):
         return scrapy.FormRequest(
             url=(
                 "https://m.coolapk.com/mp/productSelector/configSearch"
-                f"?page={page}&keyWord=&sortValue=default"
+                f"?page={page}&keyWord=&sortValue=create_time"
             ),
             formdata={"selectedFilters": ""},
             headers=self.ajax_headers,
