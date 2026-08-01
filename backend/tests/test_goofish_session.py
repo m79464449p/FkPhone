@@ -82,6 +82,17 @@ class GoofishSessionResetTest(unittest.TestCase):
                 },
             )
 
+    def test_login_session_stop_removes_stale_screenshot(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            screenshot = root / "login.png"
+            screenshot.write_bytes(b"stale")
+            session = GoofishLoginSession(root / "profile", screenshot, headless=True)
+
+            self.assertFalse(session.stop())
+            self.assertFalse(screenshot.exists())
+            self.assertFalse(session.status()["screenshot_available"])
+
 
 if __name__ == "__main__":
     unittest.main()

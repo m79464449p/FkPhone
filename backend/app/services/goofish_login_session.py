@@ -108,6 +108,9 @@ class GoofishLoginSession:
                 self._status.active = False
                 self._status.status = "cancelled"
                 self._status.message = "已取消闲鱼登录。"
+            if not thread or not thread.is_alive():
+                self.screenshot_path.unlink(missing_ok=True)
+                self._status.screenshot_available = False
         return was_active
 
     def _enqueue(self, action: str, **payload: str | float) -> None:
@@ -216,6 +219,16 @@ class GoofishLoginSession:
         self._capture(page, "success", "闲鱼登录成功，可以开始搜索。", active=False)
 
     def _capture(self, page, status: str | None = None, message: str | None = None, active: bool = True) -> None:
+        if not active:
+            self.screenshot_path.unlink(missing_ok=True)
+            with self._lock:
+                if status is not None:
+                    self._status.status = status
+                if message is not None:
+                    self._status.message = message
+                self._status.active = False
+                self._status.screenshot_available = False
+            return
         try:
             temporary_path = self.screenshot_path.with_suffix(".tmp.png")
             page.screenshot(path=str(temporary_path), full_page=False)
