@@ -19,7 +19,11 @@ from app.config import settings
 from app.database import get_connection, init_database
 
 GOOFISH_SEARCH_URL = "https://www.goofish.com/search?q=turbo5max"
-GOOFISH_LOGIN_URL = "https://passport.goofish.com/mini_login.htm?appName=xianyu"
+GOOFISH_LOGIN_URL = (
+    "https://passport.goofish.com/mini_login.htm?"
+    "appName=xianyu&appEntrance=web&styleType=vertical&"
+    "isMobile=false&qrCodeFirst=true&fromSite=77"
+)
 
 
 @dataclass

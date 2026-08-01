@@ -295,7 +295,7 @@ export function GoofishPanel({
             <Alert variant="light" color={loginStatus?.status === "success" ? "teal" : "gray"}>
               {loginStatus?.message || "正在启动服务器登录会话..."}
             </Alert>
-            {loginStatus?.status !== "success" && (
+            {loginStatus?.status !== "success" && loginStatus?.status !== "awaiting_scan" && (
               <>
                 <Group align="flex-end" wrap="wrap">
                   <TextInput
@@ -334,7 +334,9 @@ export function GoofishPanel({
             )}
             {loginStatus?.screenshot_available && (
               <div className="goofish-login-screen">
-                <Text size="xs" c="dimmed">服务器登录画面</Text>
+                <Text size="xs" c="dimmed">
+                  {loginStatus.status === "awaiting_scan" ? "请用闲鱼 App 扫描二维码" : "服务器登录画面"}
+                </Text>
                 <img
                   src={`${API_BASE}/api/goofish/login/screenshot?v=${loginStatus.screenshot_version}`}
                   alt="闲鱼服务器登录画面"

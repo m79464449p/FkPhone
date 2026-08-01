@@ -133,11 +133,15 @@ class GoofishLoginSession:
 
                 clear_goofish_cookies(context)
                 page.goto(GOOFISH_LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
-                page.get_by_placeholder("请输入手机号").wait_for(state="visible", timeout=30000)
+                # The desktop passport page defaults to a QR code when these
+                # URL parameters are used. Do not wait for the SMS controls:
+                # they belong to the fallback login mode and are not rendered
+                # while the QR code is visible.
+                page.wait_for_timeout(2500)
                 if self._stop_event.is_set():
                     self._update("cancelled", "已取消闲鱼登录。", active=False)
                     return
-                self._capture(page, "awaiting_phone", "请输入手机号并获取短信验证码。")
+                self._capture(page, "awaiting_scan", "请使用闲鱼 App 扫描下方二维码，并在手机上确认登录。")
 
                 deadline = time.monotonic() + timeout_seconds
                 last_capture = time.monotonic()
