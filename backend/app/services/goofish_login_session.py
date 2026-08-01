@@ -134,6 +134,9 @@ class GoofishLoginSession:
                 clear_goofish_cookies(context)
                 page.goto(GOOFISH_LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
                 page.get_by_placeholder("请输入手机号").wait_for(state="visible", timeout=30000)
+                if self._stop_event.is_set():
+                    self._update("cancelled", "已取消闲鱼登录。", active=False)
+                    return
                 self._capture(page, "awaiting_phone", "请输入手机号并获取短信验证码。")
 
                 deadline = time.monotonic() + timeout_seconds
@@ -153,7 +156,7 @@ class GoofishLoginSession:
                         return
 
                 if self._stop_event.is_set():
-                    self._update("cancelled", "已取消闲鱼登录。", active=False)
+                    self._capture(page, "cancelled", "已取消闲鱼登录。", active=False)
                 else:
                     self._capture(page, "expired", "登录已超时，请重新开始。", active=False)
         except PlaywrightError as exc:
@@ -247,7 +250,11 @@ class GoofishLoginSession:
                 self._status.screenshot_version += 1
 
     def _update(self, status: str, message: str, active: bool) -> None:
+        if not active:
+            self.screenshot_path.unlink(missing_ok=True)
         with self._lock:
             self._status.status = status
             self._status.message = message
             self._status.active = active
+            if not active:
+                self._status.screenshot_available = False
