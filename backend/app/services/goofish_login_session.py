@@ -125,14 +125,11 @@ class GoofishLoginSession:
             with sync_playwright() as playwright:
                 context = launch_context(playwright, self.profile_dir, headless=self.headless)
                 page = get_live_page(context)
-                page.goto(GOOFISH_SEARCH_URL, wait_until="domcontentloaded", timeout=60000)
-                page.wait_for_timeout(2500)
-                if is_logged_in(page):
-                    self._save_login(page)
-                    return
-
                 clear_goofish_cookies(context)
-                page.goto(GOOFISH_LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
+                # Go straight to the passport page. The public search page can
+                # stall in a headless server browser and prevent the QR page
+                # from ever being captured.
+                page.goto(GOOFISH_LOGIN_URL, wait_until="domcontentloaded", timeout=30000)
                 # The desktop passport page defaults to a QR code when these
                 # URL parameters are used. Do not wait for the SMS controls:
                 # they belong to the fallback login mode and are not rendered
