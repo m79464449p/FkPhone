@@ -111,6 +111,15 @@ function App({ onOpenSocmark }: AppProps) {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("parameters");
   const compareRequestId = useRef(0);
   const goofishSearchAbortRef = useRef<AbortController | null>(null);
+  const resumeGoofishSearchRef = useRef(false);
+
+  function resumeGoofishSearchIfNeeded(status: GoofishLoginStatus) {
+    if (status.active || status.status !== "success" || !resumeGoofishSearchRef.current) return;
+    resumeGoofishSearchRef.current = false;
+    setGoofishLoginOpen(false);
+    setGoofishMessage("登录成功，正在继续搜索闲鱼...");
+    window.setTimeout(() => void searchGoofish(), 0);
+  }
 
   async function loadPhones(filters = selectedSpecFilters, floor = performanceFloor) {
     setLoading(true);
@@ -206,6 +215,7 @@ function App({ onOpenSocmark }: AppProps) {
           setGoofishSearching(false);
           setGoofishSearchStartedAt(null);
           if (status.status === "success") await loadGoofishListings();
+          resumeGoofishSearchIfNeeded(status);
           return;
         }
       } catch (err) {
@@ -345,11 +355,13 @@ function App({ onOpenSocmark }: AppProps) {
         throw new Error(await readErrorMessage(response));
       }
       const result = (await response.json()) as GoofishSearchResponse;
-      setGoofishMessage(
-        result.login_required
-          ? result.message || "闲鱼需要重新登录。请在弹出的扫码窗口完成登录后重试。"
-          : `闲鱼命中 ${result.matched} 条，新增 ${result.inserted}，更新 ${result.updated}`
-      );
+      if (result.login_required) {
+        setGoofishMessage(result.message || "闲鱼需要重新登录，请完成登录后继续搜索。");
+        resumeGoofishSearchRef.current = true;
+        window.setTimeout(() => void loginGoofish(true), 0);
+        return;
+      }
+      setGoofishMessage(`闲鱼命中 ${result.matched} 条，新增 ${result.inserted}，更新 ${result.updated}`);
       await loadGoofishListings();
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
@@ -366,7 +378,8 @@ function App({ onOpenSocmark }: AppProps) {
     }
   }
 
-  async function loginGoofish() {
+  async function loginGoofish(resumeSearch = false) {
+    if (!resumeSearch) resumeGoofishSearchRef.current = false;
     setGoofishSearching(true);
     setGoofishSearchStartedAt(Date.now());
     setGoofishMessage("正在连接闲鱼登录页...");
@@ -388,6 +401,7 @@ function App({ onOpenSocmark }: AppProps) {
       const result = (await response.json()) as GoofishLoginStatus;
       setGoofishLoginStatus(result);
       setGoofishMessage(result.message);
+      resumeGoofishSearchIfNeeded(result);
     } catch (err) {
       setGoofishError(err instanceof Error ? err.message : "登录失败");
       setGoofishSearching(false);
@@ -429,6 +443,7 @@ function App({ onOpenSocmark }: AppProps) {
       const status = (await response.json()) as GoofishLoginStatus;
       setGoofishLoginStatus(status);
       setGoofishMessage(status.message);
+      resumeGoofishSearchIfNeeded(status);
     } catch (err) {
       setGoofishError(err instanceof Error ? err.message : "登录操作失败");
     } finally {
@@ -437,6 +452,7 @@ function App({ onOpenSocmark }: AppProps) {
   }
 
   async function cancelGoofishLogin() {
+    resumeGoofishSearchRef.current = false;
     try {
       await fetch(`${API_BASE}/api/goofish/login`, { method: "DELETE" });
     } finally {
