@@ -204,24 +204,10 @@ export function GoofishPanel({
     <Paper component="section" withBorder radius="md" p="md" className="goofish-panel" aria-label="闲鱼搜索">
       {headerContent && <div className="workspace-dashboard-header goofish-dashboard-header">{headerContent}</div>}
 
-      <Group justify="space-between" align="center" className="goofish-header" mb="sm">
-        <Stack gap={0}>
-          <Text size="xs" fw={800} tt="uppercase" c="teal.7">
-            Goofish
-          </Text>
-          <Text fw={800} fz="lg">
-            闲鱼监控
-          </Text>
-        </Stack>
-        <Badge variant="light" color="teal" leftSection={<ShoppingBag size={14} />}>
-          {listings.length.toLocaleString("zh-CN")} 条
-        </Badge>
-      </Group>
-
       <Stack gap="sm">
         <div className="goofish-controls">
           <TextInput
-            className="goofish-keyword-field"
+            className="workspace-search-input goofish-keyword-field"
             label="关键词"
             leftSection={<Search size={18} />}
             value={keywordInput}
@@ -229,23 +215,16 @@ export function GoofishPanel({
             onKeyDown={handleKeywordKeyDown}
             placeholder="关键词，用逗号分隔"
           />
-          <Group gap="xs" justify="flex-end" wrap="wrap" className="goofish-action-group">
-            <Button size="sm" leftSection={<RefreshCw size={18} />} onClick={onSearch} disabled={searching} variant="light">
-              {searching ? "等待登录/搜索" : "搜索闲鱼"}
-            </Button>
-            <Button size="sm" leftSection={<ShoppingBag size={18} />} onClick={onLogin} disabled={searching} variant="light">
-              登录闲鱼
-            </Button>
-            <Button size="sm" leftSection={<KeyRound size={18} />} onClick={() => setCookieModalOpen(true)} disabled={searching} variant="light">
-              导入 Cookie
-            </Button>
-            <Button size="sm" leftSection={<RefreshCw size={18} />} onClick={onRefresh} disabled={loading} variant="light">
-              {loading ? "刷新中" : "刷新列表"}
-            </Button>
-            <Button size="sm" color="gray" variant="subtle" leftSection={<Trash2 size={18} />} onClick={onResetSession} disabled={searching}>
-              清空登录态
-            </Button>
-          </Group>
+          <Button
+            className="goofish-primary-search"
+            size="sm"
+            leftSection={<RefreshCw size={18} />}
+            onClick={onSearch}
+            disabled={searching}
+            variant="light"
+          >
+            {searching ? "搜索中" : "搜索闲鱼"}
+          </Button>
         </div>
 
         <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm" className="goofish-filter-row" aria-label="闲鱼筛选条件">
@@ -279,12 +258,29 @@ export function GoofishPanel({
           />
         </SimpleGrid>
 
+        <Group gap="xs" wrap="wrap" className="goofish-action-group goofish-search-actions">
+          <Button size="sm" leftSection={<ShoppingBag size={18} />} onClick={onLogin} disabled={searching} variant="light">
+            登录闲鱼
+          </Button>
+          <Button size="sm" leftSection={<KeyRound size={18} />} onClick={() => setCookieModalOpen(true)} disabled={searching} variant="light">
+            导入 Cookie
+          </Button>
+          <Button size="sm" leftSection={<RefreshCw size={18} />} onClick={onRefresh} disabled={loading} variant="light">
+            {loading ? "刷新中" : "刷新列表"}
+          </Button>
+          <Button size="sm" color="gray" variant="subtle" leftSection={<Trash2 size={18} />} onClick={onResetSession} disabled={searching}>
+            清空登录态
+          </Button>
+        </Group>
+
         {message && <Alert variant="light" color="gray">{message}</Alert>}
         {searching && (
-          <Alert variant="light" color="teal" title={`正在检查闲鱼登录态，已等待 ${formatDuration(searchElapsedSeconds)}`}>
-            服务器正在处理闲鱼请求，请在登录弹窗中完成验证。
+          <Alert variant="light" color="teal" title={`正在检查登录状态并搜索，已用时 ${formatDuration(searchElapsedSeconds)}`}>
+            {loginOpen
+              ? "请在登录窗口完成验证，验证成功后会继续处理搜索。"
+              : "正在检查服务器上的闲鱼登录状态，验证通过后会自动开始搜索，请稍候。"}
             <Button mt="sm" size="xs" variant="subtle" onClick={onCancelSearch}>
-              取消等待
+              取消搜索
             </Button>
           </Alert>
         )}

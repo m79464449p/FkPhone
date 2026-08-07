@@ -577,9 +577,10 @@ h1 {
   width: fit-content;
   min-width: 72px;
   max-width: 112px;
+  height: auto;
   min-height: 28px;
   margin: 8px 0 0;
-  padding: 0 7px;
+  padding: 0;
   color: #6f7780;
   background: rgb(235 240 238 / 86%);
   border: 2px solid currentColor;
@@ -592,6 +593,13 @@ h1 {
   text-align: center;
   transform: rotate(-4deg);
   opacity: 0.9;
+}
+
+.goofish-table td .goofish-credit-stamp .mantine-Badge-label {
+  display: block;
+  margin-top: 0;
+  padding: 14px;
+  color: #ffffff;
 }
 
 .goofish-table td .goofish-credit-stamp::before {
@@ -4253,7 +4261,7 @@ button:disabled {
 
 .goofish-table td .goofish-credit-stamp.unknown {
   --badge-color: #aeb9b3;
-  color: #c8d1cc;
+  color: #ffffff;
   background:
     linear-gradient(135deg, rgb(174 185 179 / 18%), rgb(174 185 179 / 6%)),
     #0b100f;
@@ -4732,6 +4740,33 @@ button:disabled {
 
 .results-workspace > .filter-panel .selected-spec-filters {
   grid-column: 1 / -1;
+}
+
+/* Keep ranking controls on the same visual contract as the parameter toolbar. */
+.ranking-panel .ranking-open-link,
+.ranking-panel .ranking-tabs .mantine-Button-root {
+  min-height: 36px;
+  height: 36px;
+  color: #a8d7d1;
+  background: rgb(53 155 148 / 15%);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  box-shadow: none;
+  font-weight: 800;
+}
+
+.ranking-panel .ranking-open-link:hover:not(:disabled),
+.ranking-panel .ranking-tabs .mantine-Button-root:hover:not(:disabled) {
+  color: #fff;
+  background: #0f6b68;
+  border-color: transparent;
+}
+
+.ranking-panel .ranking-tabs .mantine-Button-root.active,
+.ranking-panel .ranking-tabs .mantine-Button-root[data-variant="filled"] {
+  color: #fff;
+  background: #0f6b68;
+  border-color: transparent;
 }
 
 /* Final ranking guard: placed last because older ranking blocks exist above. */
@@ -5370,7 +5405,7 @@ button:disabled {
 .goofish-controls {
   display: grid;
   grid-template-columns: minmax(260px, 1fr) max-content;
-  gap: 12px;
+  gap: 10px;
   align-items: end;
   width: 100%;
   margin-bottom: 10px;
@@ -5378,6 +5413,40 @@ button:disabled {
 
 .goofish-keyword-field {
   min-width: 0;
+}
+
+.goofish-primary-search {
+  align-self: end;
+  min-width: 132px;
+}
+
+.workspace-search-input {
+  min-width: 0;
+}
+
+.workspace-search-input .mantine-Input-input {
+  min-height: 42px;
+  height: 42px;
+  padding-inline: 42px 14px;
+  color: var(--text);
+  background: #080d0c;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 48%);
+  font-size: 14px;
+}
+
+.workspace-search-input .mantine-Input-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgb(0 208 159 / 14%);
+}
+
+.workspace-search-input .mantine-Input-input::placeholder {
+  color: rgb(237 244 238 / 42%);
+}
+
+.workspace-search-input .mantine-Input-section {
+  color: var(--muted);
 }
 
 .goofish-action-group {
@@ -5388,6 +5457,40 @@ button:disabled {
 .goofish-action-group .mantine-Button-root {
   flex: 0 0 auto;
   min-width: max-content;
+}
+
+.goofish-search-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+  max-width: none;
+  padding-top: 10px;
+  border-top: 1px dashed rgb(111 143 125 / 28%);
+}
+
+.goofish-search-actions .mantine-Button-root {
+  min-width: 0;
+  width: 100%;
+}
+
+.goofish-search-actions .mantine-Button-root:nth-child(3) {
+  color: #ffffff;
+  background: #0f6b68;
+  background-color: #0f6b68;
+  border-color: transparent;
+}
+
+.goofish-search-actions .mantine-Button-root:last-child {
+  color: var(--muted);
+  background: #121916;
+  border-color: rgb(255 255 255 / 8%);
+}
+
+.goofish-panel > .goofish-dashboard-header {
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px dashed rgb(111 143 125 / 28%) !important;
 }
 
 .goofish-login-screen {
@@ -5423,6 +5526,10 @@ button:disabled {
   .goofish-dashboard-header .summary-grid,
   .goofish-controls {
     grid-template-columns: 1fr;
+  }
+
+  .goofish-search-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .goofish-action-group {
@@ -5629,11 +5736,12 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 14px;
-  margin-bottom: 10px;
-  background: #0b1411;
-  border: 1px solid rgb(111 143 125 / 26%);
-  border-radius: 6px;
+  padding: 0 0 14px;
+  margin-bottom: 14px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px dashed rgb(111 143 125 / 28%);
+  border-radius: 0;
 }
 
 .ranking-header h2 {
@@ -5667,17 +5775,18 @@ button:disabled {
 }
 
 .ranking-tabs button {
-  min-height: 42px;
-  color: var(--muted);
-  background: #0b1411;
-  border: 1px solid rgb(111 143 125 / 26%);
-  border-radius: 4px;
+  min-height: 36px;
+  height: 36px;
+  color: #a8d7d1;
+  background: rgb(53 155 148 / 15%);
+  border: 1px solid transparent;
+  border-radius: 8px;
   font-weight: 800;
 }
 
 .ranking-tabs button.active {
-  color: #07110e;
-  background: var(--primary);
+  color: #ffffff;
+  background: #0f6b68;
   border-color: transparent;
 }
 

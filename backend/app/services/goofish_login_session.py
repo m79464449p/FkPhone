@@ -149,6 +149,9 @@ class GoofishLoginSession:
                     try:
                         command = self._commands.get(timeout=1)
                     except queue.Empty:
+                        if is_logged_in(page):
+                            self._save_login(page)
+                            return
                         if time.monotonic() - last_capture >= 5:
                             self._capture(page)
                             last_capture = time.monotonic()
@@ -156,7 +159,8 @@ class GoofishLoginSession:
 
                     self._handle_command(page, command)
                     last_capture = time.monotonic()
-                    if self.status()["status"] == "success":
+                    if is_logged_in(page):
+                        self._save_login(page)
                         return
 
                 if self._stop_event.is_set():

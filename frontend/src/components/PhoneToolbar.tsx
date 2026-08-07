@@ -88,6 +88,7 @@ export function PhoneToolbar({
 
       <Stack gap="sm" className="filter-stack">
         <TextInput
+          className="workspace-search-input"
           size="sm"
           label="关键词"
           leftSection={<Search size={18} />}

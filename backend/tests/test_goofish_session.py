@@ -1,10 +1,45 @@
 import tempfile
+import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from app.config import settings
 from app.routers import goofish
 from app.services.goofish_login_session import GoofishLoginSession
+
+
+class FakeLoginContext:
+    def __init__(self):
+        self.logged_in = False
+
+    def cookies(self, urls):
+        return [{"name": "unb", "value": "user"}] if self.logged_in else []
+
+    def close(self):
+        return None
+
+
+class FakeLoginPage:
+    def __init__(self, context):
+        self.context = context
+        self.url = "about:blank"
+
+    def goto(self, url, **kwargs):
+        self.url = url
+
+    def wait_for_timeout(self, milliseconds):
+        if self.url.startswith("https://passport.goofish.com"):
+            self.context.logged_in = True
+            self.url = "https://www.goofish.com/search?q=turbo5max"
+
+
+class FakePlaywright:
+    def __enter__(self):
+        return object()
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
 
 
 class GoofishSessionResetTest(unittest.TestCase):
@@ -92,6 +127,31 @@ class GoofishSessionResetTest(unittest.TestCase):
             self.assertFalse(session.stop())
             self.assertFalse(screenshot.exists())
             self.assertFalse(session.status()["screenshot_available"])
+
+    def test_qr_login_detects_success_without_pointer_commands(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            context = FakeLoginContext()
+            page = FakeLoginPage(context)
+            session = GoofishLoginSession(root / "profile", root / "login.png", headless=True)
+
+            def mark_saved(_page):
+                session._update("success", "闲鱼登录成功，可以开始搜索。", active=False)
+
+            with patch("app.services.goofish_login_session.sync_playwright", return_value=FakePlaywright()), patch(
+                "app.services.goofish_login_session.launch_context", return_value=context
+            ), patch("app.services.goofish_login_session.get_live_page", return_value=page), patch(
+                "app.services.goofish_login_session.clear_goofish_cookies"
+            ), patch("app.services.goofish_login_session.GoofishLoginSession._capture"), patch.object(
+                session, "_save_login", side_effect=mark_saved
+            ):
+                session.start(timeout_seconds=5)
+                deadline = time.monotonic() + 2
+                while session.status()["active"] and time.monotonic() < deadline:
+                    time.sleep(0.01)
+
+            self.assertEqual(session.status()["status"], "success")
+            self.assertFalse(session.status()["active"])
 
 
 if __name__ == "__main__":
