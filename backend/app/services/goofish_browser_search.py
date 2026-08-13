@@ -779,9 +779,6 @@ def ensure_logged_in(page, login_timeout: int) -> bool:
 
 
 def is_logged_in(page) -> bool:
-    if is_login_url(page.url):
-        return False
-
     cookie_jar = read_page_cookie_jar(page)
     return bool(cookie_jar.get("unb"))
 

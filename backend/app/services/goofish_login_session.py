@@ -46,6 +46,7 @@ class GoofishLoginSession:
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._status = LoginStatus()
+        self._login_saved = False
 
     def matches(self, profile_dir: Path, screenshot_path: Path, headless: bool) -> bool:
         return self.profile_dir == profile_dir and self.screenshot_path == screenshot_path and self.headless == headless
@@ -60,6 +61,7 @@ class GoofishLoginSession:
             self.screenshot_path.unlink(missing_ok=True)
             self._commands = queue.Queue()
             self._stop_event = threading.Event()
+            self._login_saved = False
             self._status = LoginStatus(status="starting", active=True, message="正在连接闲鱼登录页...")
             self._thread = threading.Thread(
                 target=self._run,
@@ -141,7 +143,6 @@ class GoofishLoginSession:
                 self._capture(page, "awaiting_scan", "请使用闲鱼 App 扫描下方二维码，并在手机上确认登录。")
 
                 deadline = time.monotonic() + timeout_seconds
-                last_capture = time.monotonic()
                 while not self._stop_event.is_set() and time.monotonic() < deadline:
                     try:
                         command = self._commands.get(timeout=1)
@@ -149,13 +150,9 @@ class GoofishLoginSession:
                         if is_logged_in(page):
                             self._save_login(page)
                             return
-                        if time.monotonic() - last_capture >= 5:
-                            self._capture(page)
-                            last_capture = time.monotonic()
                         continue
 
                     self._handle_command(page, command)
-                    last_capture = time.monotonic()
                     if is_logged_in(page):
                         self._save_login(page)
                         return
@@ -174,6 +171,11 @@ class GoofishLoginSession:
                     context.close()
                 except PlaywrightError:
                     pass
+            # Do not publish success until the persistent browser profile has
+            # been released. The frontend starts the pending search as soon as
+            # it sees success, and that search must not race this context.
+            if self._login_saved:
+                self._capture(None, "success", "闲鱼登录成功，可以开始搜索。", active=False)
 
     def _handle_command(self, page, command: LoginCommand) -> None:
         if command.action == "send_sms":
@@ -224,7 +226,7 @@ class GoofishLoginSession:
             cookie_jar = read_page_cookie_jar(page)
         if cookie_jar:
             write_cookie_file(cookie_jar)
-        self._capture(page, "success", "闲鱼登录成功，可以开始搜索。", active=False)
+        self._login_saved = True
 
     def _capture(self, page, status: str | None = None, message: str | None = None, active: bool = True) -> None:
         if not active:

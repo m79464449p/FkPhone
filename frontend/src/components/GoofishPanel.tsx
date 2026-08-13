@@ -100,7 +100,20 @@ export function GoofishPanel({
   const [cookieInput, setCookieInput] = useState("");
   const [loginPhone, setLoginPhone] = useState("");
   const [loginCode, setLoginCode] = useState("");
+  const [loginScreenshotUrl, setLoginScreenshotUrl] = useState<string | null>(null);
   const loginPointerStart = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (!loginStatus?.screenshot_available) {
+      setLoginScreenshotUrl(null);
+      return;
+    }
+
+    const nextUrl = `${API_BASE}/api/goofish/login/screenshot?v=${loginStatus.screenshot_version}`;
+    const image = new window.Image();
+    image.onload = () => setLoginScreenshotUrl(nextUrl);
+    image.src = nextUrl;
+  }, [loginStatus?.screenshot_available, loginStatus?.screenshot_version]);
 
   useEffect(() => {
     if (!preview) return;
@@ -328,13 +341,13 @@ export function GoofishPanel({
                 </Group>
               </>
             )}
-            {loginStatus?.screenshot_available && (
+            {loginStatus?.screenshot_available && loginScreenshotUrl && (
               <div className="goofish-login-screen">
                 <Text size="xs" c="dimmed">
                   {loginStatus.status === "awaiting_scan" ? "请用闲鱼 App 扫描二维码" : "服务器登录画面"}
                 </Text>
                 <img
-                  src={`${API_BASE}/api/goofish/login/screenshot?v=${loginStatus.screenshot_version}`}
+                  src={loginScreenshotUrl}
                   alt="闲鱼服务器登录画面"
                   draggable={false}
                   onPointerDown={handleLoginPointerDown}
