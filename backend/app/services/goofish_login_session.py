@@ -1,5 +1,4 @@
 import queue
-import re
 import threading
 import time
 from dataclasses import asdict, dataclass
@@ -10,15 +9,15 @@ from playwright.sync_api import sync_playwright
 
 from app.services.goofish_browser_search import (
     GOOFISH_LOGIN_URL,
-    GOOFISH_SEARCH_URL,
     clear_goofish_cookies,
     get_live_page,
-    has_mtop_login_cookies,
     is_logged_in,
     launch_context,
     read_page_cookie_jar,
     write_cookie_file,
 )
+
+QR_REFRESH_SECONDS = 90
 
 
 @dataclass
@@ -76,20 +75,6 @@ class GoofishLoginSession:
         with self._lock:
             return asdict(self._status)
 
-    def send_sms(self, phone: str) -> dict[str, object]:
-        normalized = re.sub(r"\s+", "", phone)
-        if not re.fullmatch(r"1\d{10}", normalized):
-            raise ValueError("请输入 11 位中国大陆手机号")
-        self._enqueue("send_sms", phone=normalized)
-        return self.status()
-
-    def verify(self, code: str) -> dict[str, object]:
-        normalized = re.sub(r"\s+", "", code)
-        if not re.fullmatch(r"\d{4,8}", normalized):
-            raise ValueError("请输入短信验证码")
-        self._enqueue("verify", code=normalized)
-        return self.status()
-
     def click(self, x: float, y: float) -> dict[str, object]:
         self._enqueue("click", x=x, y=y)
         return self.status()
@@ -143,6 +128,7 @@ class GoofishLoginSession:
                 self._capture(page, "awaiting_scan", "请使用闲鱼 App 扫描下方二维码，并在手机上确认登录。")
 
                 deadline = time.monotonic() + timeout_seconds
+                next_qr_refresh = time.monotonic() + QR_REFRESH_SECONDS
                 while not self._stop_event.is_set() and time.monotonic() < deadline:
                     try:
                         command = self._commands.get(timeout=1)
@@ -150,6 +136,14 @@ class GoofishLoginSession:
                         if is_logged_in(page):
                             self._save_login(page)
                             return
+                        if time.monotonic() >= next_qr_refresh:
+                            # Passport QR codes expire. Reload only at the
+                            # expiration boundary instead of replacing the
+                            # screenshot continuously while the user scans.
+                            page.goto(GOOFISH_LOGIN_URL, wait_until="domcontentloaded", timeout=30000)
+                            page.wait_for_timeout(1500)
+                            self._capture(page, "awaiting_scan", "二维码已更新，请使用闲鱼 App 重新扫描并确认登录。")
+                            next_qr_refresh = time.monotonic() + QR_REFRESH_SECONDS
                         continue
 
                     self._handle_command(page, command)
@@ -178,32 +172,6 @@ class GoofishLoginSession:
                 self._capture(None, "success", "闲鱼登录成功，可以开始搜索。", active=False)
 
     def _handle_command(self, page, command: LoginCommand) -> None:
-        if command.action == "send_sms":
-            page.get_by_placeholder("请输入手机号").fill(str(command.payload["phone"]))
-            page.get_by_text("获取验证码", exact=True).click()
-            page.wait_for_timeout(2000)
-            self._capture(page, "code_sent", "验证码请求已提交，请查看短信；如出现安全验证，请在下方画面完成。")
-            return
-
-        if command.action == "verify":
-            self._update("verifying", "正在验证短信验证码...", active=True)
-            page.get_by_placeholder("请输入验证码").fill(str(command.payload["code"]))
-            page.get_by_role("button", name="登录").click()
-            deadline = time.monotonic() + 30
-            while time.monotonic() < deadline and not self._stop_event.is_set():
-                page.wait_for_timeout(1000)
-                if is_logged_in(page):
-                    self._save_login(page)
-                    return
-                if page.url != GOOFISH_LOGIN_URL and "passport.goofish.com" not in page.url:
-                    page.goto(GOOFISH_SEARCH_URL, wait_until="domcontentloaded", timeout=60000)
-                    page.wait_for_timeout(2500)
-                    if is_logged_in(page):
-                        self._save_login(page)
-                        return
-            self._capture(page, "code_sent", "尚未登录成功。请检查验证码，或完成下方安全验证后重试。")
-            return
-
         if command.action == "click":
             page.mouse.click(float(command.payload["x"]), float(command.payload["y"]))
             page.wait_for_timeout(750)
@@ -220,10 +188,6 @@ class GoofishLoginSession:
 
     def _save_login(self, page) -> None:
         cookie_jar = read_page_cookie_jar(page)
-        if not has_mtop_login_cookies(cookie_jar):
-            page.goto(GOOFISH_SEARCH_URL, wait_until="domcontentloaded", timeout=60000)
-            page.wait_for_timeout(3000)
-            cookie_jar = read_page_cookie_jar(page)
         if cookie_jar:
             write_cookie_file(cookie_jar)
         self._login_saved = True

@@ -83,14 +83,6 @@ class GoofishLoginStatusResponse(BaseModel):
     screenshot_version: int
 
 
-class GoofishLoginSmsRequest(BaseModel):
-    phone: str = Field(min_length=11, max_length=20)
-
-
-class GoofishLoginVerifyRequest(BaseModel):
-    code: str = Field(min_length=4, max_length=8)
-
-
 class GoofishLoginPointerRequest(BaseModel):
     x: float = Field(ge=0, le=1440)
     y: float = Field(ge=0, le=1000)
@@ -232,24 +224,6 @@ def login_goofish(payload: GoofishLoginRequest) -> GoofishLoginStatusResponse:
 @router.get("/login", response_model=GoofishLoginStatusResponse)
 def get_goofish_login_status() -> GoofishLoginStatusResponse:
     return GoofishLoginStatusResponse(**get_goofish_login_session().status())
-
-
-@router.post("/login/sms", response_model=GoofishLoginStatusResponse)
-def send_goofish_login_sms(payload: GoofishLoginSmsRequest) -> GoofishLoginStatusResponse:
-    try:
-        status = get_goofish_login_session().send_sms(payload.phone)
-    except (RuntimeError, ValueError) as exc:
-        raise HTTPException(status_code=409 if isinstance(exc, RuntimeError) else 400, detail=str(exc)) from exc
-    return GoofishLoginStatusResponse(**status)
-
-
-@router.post("/login/verify", response_model=GoofishLoginStatusResponse)
-def verify_goofish_login(payload: GoofishLoginVerifyRequest) -> GoofishLoginStatusResponse:
-    try:
-        status = get_goofish_login_session().verify(payload.code)
-    except (RuntimeError, ValueError) as exc:
-        raise HTTPException(status_code=409 if isinstance(exc, RuntimeError) else 400, detail=str(exc)) from exc
-    return GoofishLoginStatusResponse(**status)
 
 
 @router.post("/login/click", response_model=GoofishLoginStatusResponse)

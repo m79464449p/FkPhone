@@ -107,7 +107,6 @@ function App({ onOpenSocmark }: AppProps) {
   const [goofishError, setGoofishError] = useState("");
   const [goofishLoginOpen, setGoofishLoginOpen] = useState(false);
   const [goofishLoginStatus, setGoofishLoginStatus] = useState<GoofishLoginStatus | null>(null);
-  const [goofishLoginBusy, setGoofishLoginBusy] = useState(false);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("parameters");
   const compareRequestId = useRef(0);
   const goofishSearchAbortRef = useRef<AbortController | null>(null);
@@ -409,16 +408,8 @@ function App({ onOpenSocmark }: AppProps) {
     }
   }
 
-  async function sendGoofishSms(phone: string) {
-    await updateGoofishLogin("/api/goofish/login/sms", { phone });
-  }
-
-  async function verifyGoofishLogin(code: string) {
-    await updateGoofishLogin("/api/goofish/login/verify", { code });
-  }
-
   async function clickGoofishLogin(x: number, y: number) {
-    await updateGoofishLogin("/api/goofish/login/click", { x, y }, false);
+    await updateGoofishLogin("/api/goofish/login/click", { x, y });
   }
 
   async function dragGoofishLogin(startX: number, startY: number, endX: number, endY: number) {
@@ -427,11 +418,10 @@ function App({ onOpenSocmark }: AppProps) {
       start_y: startY,
       end_x: endX,
       end_y: endY
-    }, false);
+    });
   }
 
-  async function updateGoofishLogin(path: string, body: object, showBusy = true) {
-    if (showBusy) setGoofishLoginBusy(true);
+  async function updateGoofishLogin(path: string, body: object) {
     setGoofishError("");
     try {
       const response = await fetch(`${API_BASE}${path}`, {
@@ -446,8 +436,6 @@ function App({ onOpenSocmark }: AppProps) {
       resumeGoofishSearchIfNeeded(status);
     } catch (err) {
       setGoofishError(err instanceof Error ? err.message : "登录操作失败");
-    } finally {
-      if (showBusy) setGoofishLoginBusy(false);
     }
   }
 
@@ -808,10 +796,7 @@ function App({ onOpenSocmark }: AppProps) {
           onLogin={() => void loginGoofish()}
           loginOpen={goofishLoginOpen}
           loginStatus={goofishLoginStatus}
-          loginBusy={goofishLoginBusy}
           onLoginClose={() => void cancelGoofishLogin()}
-          onSendSms={sendGoofishSms}
-          onVerifyLogin={verifyGoofishLogin}
           onLoginClick={clickGoofishLogin}
           onLoginDrag={dragGoofishLogin}
           onImportCookie={importGoofishCookie}

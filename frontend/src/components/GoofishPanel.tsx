@@ -45,10 +45,7 @@ type GoofishPanelProps = {
   onLogin: () => void;
   loginOpen: boolean;
   loginStatus: GoofishLoginStatus | null;
-  loginBusy: boolean;
   onLoginClose: () => void;
-  onSendSms: (phone: string) => Promise<void>;
-  onVerifyLogin: (code: string) => Promise<void>;
   onLoginClick: (x: number, y: number) => Promise<void>;
   onLoginDrag: (startX: number, startY: number, endX: number, endY: number) => Promise<void>;
   onImportCookie: (cookie: string) => Promise<void>;
@@ -83,10 +80,7 @@ export function GoofishPanel({
   onLogin,
   loginOpen,
   loginStatus,
-  loginBusy,
   onLoginClose,
-  onSendSms,
-  onVerifyLogin,
   onLoginClick,
   onLoginDrag,
   onImportCookie,
@@ -98,8 +92,6 @@ export function GoofishPanel({
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [cookieModalOpen, setCookieModalOpen] = useState(false);
   const [cookieInput, setCookieInput] = useState("");
-  const [loginPhone, setLoginPhone] = useState("");
-  const [loginCode, setLoginCode] = useState("");
   const [loginScreenshotUrl, setLoginScreenshotUrl] = useState<string | null>(null);
   const loginPointerStart = useRef<{ x: number; y: number } | null>(null);
 
@@ -304,43 +296,6 @@ export function GoofishPanel({
             <Alert variant="light" color={loginStatus?.status === "success" ? "teal" : "gray"}>
               {loginStatus?.message || "正在启动服务器登录会话..."}
             </Alert>
-            {loginStatus?.status !== "success" && loginStatus?.status !== "awaiting_scan" && (
-              <>
-                <Group align="flex-end" wrap="wrap">
-                  <TextInput
-                    label="手机号"
-                    value={loginPhone}
-                    onChange={(event) => setLoginPhone(event.currentTarget.value)}
-                    placeholder="中国大陆手机号"
-                    style={{ flex: "1 1 220px" }}
-                  />
-                  <Button
-                    variant="light"
-                    loading={loginBusy}
-                    disabled={!loginStatus?.active || !/^1\d{10}$/.test(loginPhone.trim())}
-                    onClick={() => void onSendSms(loginPhone)}
-                  >
-                    获取验证码
-                  </Button>
-                </Group>
-                <Group align="flex-end" wrap="wrap">
-                  <TextInput
-                    label="短信验证码"
-                    value={loginCode}
-                    onChange={(event) => setLoginCode(event.currentTarget.value)}
-                    placeholder="验证码"
-                    style={{ flex: "1 1 220px" }}
-                  />
-                  <Button
-                    loading={loginBusy}
-                    disabled={!loginStatus?.active || !/^\d{4,8}$/.test(loginCode.trim())}
-                    onClick={() => void onVerifyLogin(loginCode)}
-                  >
-                    验证并登录
-                  </Button>
-                </Group>
-              </>
-            )}
             {loginStatus?.screenshot_available && loginScreenshotUrl && (
               <div className="goofish-login-screen">
                 <Text size="xs" c="dimmed">

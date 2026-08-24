@@ -97,22 +97,6 @@ class GoofishSessionResetTest(unittest.TestCase):
 
         self.assertEqual(detail, "x" * 2000)
 
-    def test_login_session_rejects_invalid_phone_before_start(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            session = GoofishLoginSession(root / "profile", root / "login.png", headless=True)
-
-            with self.assertRaisesRegex(ValueError, "11 位"):
-                session.send_sms("123")
-
-    def test_login_session_rejects_invalid_code_before_start(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            session = GoofishLoginSession(root / "profile", root / "login.png", headless=True)
-
-            with self.assertRaisesRegex(ValueError, "短信验证码"):
-                session.verify("12ab")
-
     def test_login_session_initial_status_is_idle(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
